@@ -40,7 +40,7 @@ from .routes import (
     news,
 )
 from .ws_hub import hub
-from . import db  # noqa: F401  # ensure sqlite init
+from . import db  # noqa: F401  # trigger engine lazy build + best-effort admin seed
 
 logger = logging.getLogger("zhice.api")
 
@@ -129,16 +129,45 @@ app.include_router(ws.router, prefix="/api")
 
 @app.get("/api/health")
 def health():
-    from .db import get_conn
-    status = {"api": "ok", "database": "ok"}
+    """Surface API + DB liveness, the active DB scheme, and alembic revision.
+
+    T03 (M001/S01) extended this from a binary "ok/degraded" to a structured
+    response that reveals (a) whether the configured DB scheme is mysql or
+    legacy sqlite — useful for catching mis-deploys — and (b) the alembic
+    ``version_num`` of the running schema, which tells operators if a
+    migration was applied without having to shell into the container.
+    """
+    from .db import get_engine
+
+    components: dict[str, str] = {"api": "ok", "database": "ok"}
+    db_scheme = (
+        settings.database_url.split("://", 1)[0].lower() if settings.database_url else "none"
+    )
+    alembic_revision: str | None = None
+
     try:
-        conn = get_conn()
-        conn.execute("SELECT 1")
-        conn.close()
+        engine = get_engine()
+        with engine.connect() as conn:
+            conn.exec_driver_sql("SELECT 1")
+            try:
+                row = conn.exec_driver_sql(
+                    "SELECT version_num FROM alembic_version"
+                ).fetchone()
+                if row is not None:
+                    alembic_revision = row[0]
+            except Exception:
+                # alembic_version absent → migration hasn't run yet.
+                alembic_revision = None
     except Exception:
-        status["database"] = "error"
-    overall = "ok" if all(v == "ok" for v in status.values()) else "degraded"
-    return {"status": overall, "components": status}
+        components["database"] = "error"
+
+    overall = "ok" if all(v == "ok" for v in components.values()) else "degraded"
+    return {
+        "status": overall,
+        "components": components,
+        "db_scheme": db_scheme,
+        "alembic_revision": alembic_revision,
+    }
 
 
 @app.exception_handler(Exception)

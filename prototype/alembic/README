@@ -1,0 +1,5 @@
+Generic single-database configuration for the Zhice backend.
+
+This directory was bootstrapped by T03 (M001/S01). The 0001_initial revision
+mirrors the 27-table schema previously inlined in apps/api/db.py. New schema
+changes go through ``alembic revision --autogenerate`` from prototype/.

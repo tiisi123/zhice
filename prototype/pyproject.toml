@@ -12,6 +12,10 @@ dependencies = [
     "apscheduler>=3.10",
     "python-multipart>=0.0.9",
     "pypdf>=4.2",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    "pymysql>=1.1",
+    "cryptography>=42",
 ]
 
 [project.optional-dependencies]
