@@ -8,7 +8,9 @@ import {
 import { fetchApi, postApi } from '../api/client'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
-import type { AnyData } from '../api/types'
+import type { AnyData, ApiMeta, DataStatus } from '../api/types'
+import { extractMetaList } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 const BrokenCasesPage = lazy(() => import('./BrokenCasesPage'))
 const LonghuPage = lazy(() => import('./LonghuPage'))
@@ -34,14 +36,6 @@ interface RiskOverview {
   risk_level: 'high' | 'medium' | 'low'
 }
 
-interface ApiMeta {
-  name: string
-  source?: string
-  data_status?: string
-  mock?: boolean
-  message?: string
-}
-
 function RiskDashboard() {
   const [data, setData] = useState<RiskOverview | null>(null)
   const [phase, setPhase] = useState<AnyData>(null)
@@ -56,11 +50,11 @@ function RiskDashboard() {
       fetchApi<AnyData>('/market/sentiment-phase').catch(() => null),
     ]).then(([broken, summary, ph]) => {
       setPhase(ph)
-      setMeta([
-        { name: '炸板', source: broken?.source, data_status: broken?.data_status, mock: broken?.mock, message: broken?.message },
-        { name: '市场', source: summary?.source, data_status: summary?.data_status, mock: summary?.mock, message: summary?.message },
-        { name: '情绪', source: ph?.source, data_status: ph?.data_status, mock: ph?.mock, message: ph?.message },
-      ].filter((m) => m.source || m.data_status || m.mock !== undefined))
+      setMeta(extractMetaList([
+        { name: '炸板', resp: broken },
+        { name: '市场', resp: summary },
+        { name: '情绪', resp: ph },
+      ]))
       if (!broken || !summary) { setData(null); return }
       const byReason = broken.by_reason || {}
       const total = broken.total || 0
@@ -100,9 +94,12 @@ function RiskDashboard() {
       {meta.length > 0 && (
         <Space wrap size={6} style={{ marginBottom: 12 }}>
           {meta.map((m) => (
-            <Tag key={m.name} color={m.mock ? 'red' : m.data_status === 'empty' ? 'default' : m.data_status === 'ok' ? 'green' : 'orange'}>
-              {m.name}: {m.source || '未知源'} / {m.data_status || '未知状态'}{m.mock ? ' / mock' : ''}
-            </Tag>
+            <DataStatusBadge
+              key={m.name ?? m.source}
+              status={m.data_status as DataStatus}
+              source={m.source}
+              mock={m.mock}
+            />
           ))}
         </Space>
       )}

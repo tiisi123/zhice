@@ -3,7 +3,9 @@ import { Card, Col, Row, Input, Button, Descriptions, Tag, Table, Statistic, Spi
 import { RobotOutlined, RiseOutlined, FallOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
-import type { AnyData } from '../api/types'
+import type { AnyData, ApiMeta, DataStatus } from '../api/types'
+import { extractMetaList } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 export default function ValuationPage() {
   const [code, setCode] = useState('600519')
@@ -18,7 +20,7 @@ export default function ValuationPage() {
   const [aiLoading, setAiLoading] = useState(false)
   const [altData, setAltData] = useState<AnyData[]>([])
   const [expHistory, setExpHistory] = useState<AnyData[]>([])
-  const [dataStatus, setDataStatus] = useState<AnyData[]>([])
+  const [dataStatus, setDataStatus] = useState<ApiMeta[]>([])
 
   const load = async (c: string) => {
     setLoading(true)
@@ -42,14 +44,14 @@ export default function ValuationPage() {
       setForecast(fc?.scenarios || fc?.data?.scenarios || null)
       setAltData(alt?.data || [])
       setExpHistory(eh?.history || [])
-      setDataStatus([
-        { label: '基本面', source: f?.source, data_status: f?.data_status, mock: f?.mock, message: f?.message },
-        { label: '卖方预期', source: e?.source, data_status: e?.data_status, mock: e?.mock, message: (e as Error)?.message },
-        { label: 'DCF', source: d?.source, data_status: d?.data_status, mock: d?.mock, message: d?.message },
-        { label: '财务预测', source: fc?.source, data_status: fc?.data_status, mock: fc?.mock, message: fc?.message },
-        { label: '另类数据', source: alt?.source, data_status: alt?.data_status, mock: alt?.mock, message: alt?.message },
-        { label: '预期历史', source: eh?.source, data_status: eh?.data_status, mock: eh?.mock, message: eh?.message },
-      ].filter(s => s.source || s.data_status || s.mock))
+      setDataStatus(extractMetaList([
+        { name: '基本面', resp: f },
+        { name: '卖方预期', resp: e },
+        { name: 'DCF', resp: d },
+        { name: '财务预测', resp: fc },
+        { name: '另类数据', resp: alt },
+        { name: '预期历史', resp: eh },
+      ]))
     } catch (e) {
       message.error((e as Error)?.message || '获取估值数据失败')
     }
@@ -93,13 +95,24 @@ export default function ValuationPage() {
 
       {fin && (
         <>
-          {dataStatus.some(s => s.mock || s.data_status === 'stale') && (
+          {dataStatus.some(s => s.mock || s.data_status === 'fallback' || s.data_status === 'unavailable') && (
             <Alert
               type="warning"
               showIcon
               style={{ marginBottom: 16 }}
-              message="估值页包含样例或规则推演数据"
-              description={dataStatus.map(s => `${s.label}: ${s.source || 'unknown'} / ${s.data_status || 'unknown'}${s.message ? `（${s.message}）` : ''}`).join('；')}
+              message="估值页包含样例或降级数据"
+              description={
+                <Space wrap size={6}>
+                  {dataStatus.map((s) => (
+                    <DataStatusBadge
+                      key={s.name ?? s.source}
+                      status={s.data_status as DataStatus}
+                      source={s.source}
+                      mock={s.mock}
+                    />
+                  ))}
+                </Space>
+              }
             />
           )}
 

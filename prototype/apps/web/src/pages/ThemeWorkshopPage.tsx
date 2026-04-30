@@ -12,6 +12,9 @@ import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
 import { AskAIChip, SectionHeader } from '../components/smart'
+import type { ApiMeta, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 interface Sector {
   PlateID?: string
@@ -55,13 +58,6 @@ interface DetailStock {
   stock_name?: string
   change_rate?: number
   board_count?: number
-}
-
-interface ApiMeta {
-  source?: string
-  data_status?: string
-  mock?: boolean
-  message?: string
 }
 
 function safeText(v: unknown, fallback = '—'): string {
@@ -347,12 +343,12 @@ export default function ThemeWorkshopPage() {
   const [selected, setSelected] = useState('')
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
-  const [meta, setMeta] = useState<ApiMeta>({})
+  const [meta, setMeta] = useState<ApiMeta | null>(null)
 
   useEffect(() => {
     setLoading(true)
     setErr('')
-    setMeta({})
+    setMeta(null)
     Promise.all([
       fetchApi<{ data: Sector[]; source?: string; data_status?: string; mock?: boolean; message?: string }>('/theme/sectors'),
       fetchApi<{ items: CycleItem[] }>('/theme/cycle-batch?top=20'),
@@ -361,7 +357,7 @@ export default function ThemeWorkshopPage() {
         pickNum(b, 'intensity') - pickNum(a, 'intensity')
       )
       setSectors(data)
-      setMeta({ source: sec.source, data_status: sec.data_status, mock: sec.mock, message: sec.message })
+      setMeta(extractMeta(sec))
       const m: Record<string, CycleItem> = {}
       for (const c of cyc.items || []) m[c.name] = c
       setCycles(m)
@@ -397,11 +393,13 @@ export default function ThemeWorkshopPage() {
       </div>
       {err && <Alert type="error" showIcon message={err} style={{ marginBottom: 12 }} />}
       {!err && sectors.length === 0 && <Alert type="info" showIcon message="暂无题材数据" description="接口返回真实空状态，未展示示例题材。" style={{ marginBottom: 12 }} />}
-      {!err && (
+      {!err && meta && (
         <Alert
-          type={meta.mock ? 'warning' : meta.data_status === 'empty' ? 'info' : 'success'}
+          type={meta.mock ? 'warning' : meta.data_status === 'unavailable' || meta.data_status === 'error' ? 'error' : meta.data_status === 'empty' ? 'info' : 'success'}
           showIcon
-          message={`数据源：${meta.source || '未知源'} / 状态：${meta.data_status || '未知状态'}${meta.mock ? ' / mock' : ''}`}
+          message={
+            <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+          }
           description={meta.message}
           style={{ marginBottom: 12 }}
         />

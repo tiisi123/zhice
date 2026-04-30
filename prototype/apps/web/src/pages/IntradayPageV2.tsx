@@ -10,11 +10,13 @@ import * as echarts from 'echarts'
 import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { useMarketWS } from '../api/useMarketWS'
-import type { LimitUpStock, AnyData } from '../api/types'
+import type { LimitUpStock, AnyData, ApiMeta, DataStatus } from '../api/types'
+import { extractMetaList } from '../api/useApiMeta'
 import {
   AskAIChip, SectionHeader,
 } from '../components/smart'
 import MockBanner from '../components/MockBanner'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 interface SectorRaw {
   PlateName?: string
@@ -34,14 +36,6 @@ interface SectorRaw {
   change_rate?: number | string
   intensity?: number | string
   net_flow?: number | string
-}
-
-interface ApiMeta {
-  name: string
-  source?: string
-  data_status?: string
-  mock?: boolean
-  message?: string
 }
 
 interface ListResp<T> {
@@ -90,24 +84,17 @@ function normalizeStock<T>(item: T): T {
   } as T
 }
 
-function metaOf(name: string, resp: AnyData): ApiMeta {
-  return {
-    name,
-    source: resp?.source,
-    data_status: resp?.data_status,
-    mock: resp?.mock,
-    message: resp?.message,
-  }
-}
-
 function MetaStrip({ items }: { items: ApiMeta[] }) {
   if (!items.length) return null
   return (
     <Space wrap size={6} style={{ marginBottom: 12 }}>
       {items.map((m) => (
-        <Tag key={m.name} color={m.mock ? 'red' : m.data_status === 'empty' ? 'default' : m.data_status === 'ok' ? 'green' : 'orange'}>
-          {m.name}: {m.source || '未知源'} / {m.data_status || '未知状态'}{m.mock ? ' / mock' : ''}
-        </Tag>
+        <DataStatusBadge
+          key={m.name ?? m.source}
+          status={m.data_status as DataStatus}
+          source={m.source}
+          mock={m.mock}
+        />
       ))}
     </Space>
   )
@@ -560,13 +547,13 @@ export default function IntradayPageV2() {
       setHot(((hs as AnyData).data || []).map(normalizeStock))
       setAnomaly(((an as AnyData).data || []).map(normalizeStock))
       setSectors((sec as AnyData).data || [])
-      const nextMeta = [
-        metaOf('涨停池', lu),
-        metaOf('炸板池', br),
-        metaOf('热股', hs),
-        metaOf('异动', an),
-        metaOf('题材', sec),
-      ].filter((m) => !((m as AnyData).__err))
+      const nextMeta = extractMetaList([
+        { name: '涨停池', resp: lu },
+        { name: '炸板池', resp: br },
+        { name: '热股', resp: hs },
+        { name: '异动', resp: an },
+        { name: '题材', resp: sec },
+      ]).filter((m) => !((m as AnyData).__err))
       setMeta(nextMeta)
       setIsMock(nextMeta.some((m) => m.mock))
       setLoading(false)

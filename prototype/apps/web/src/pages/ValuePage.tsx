@@ -5,7 +5,9 @@ import * as echarts from 'echarts'
 import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
-import type { PortfolioData, PortfolioStock, AnyData } from '../api/types'
+import type { PortfolioData, PortfolioStock, AnyData, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 function PortfolioSummary({ data }: { data: PortfolioData }) {
   const pnlColor = data.total_pnl >= 0 ? '#f5222d' : '#52c41a'
@@ -96,15 +98,23 @@ export default function ValuePage() {
         {highPE.length > 0 && <Tag color="red">估值偏高：{highPE.map(s => s.name).join('、')}</Tag>}
       </div>
 
-      {(data as AnyData).mock && (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          message="当前持仓为示例数据"
-          description={`${(data as AnyData).source || 'sample_portfolio'} / ${(data as AnyData).data_status || 'stale'}。${(data as AnyData).message || '真实用户持仓待接入。'}`}
-        />
-      )}
+      {(data as AnyData).mock && (() => {
+        const meta = extractMeta(data as AnyData)
+        return (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={
+              <Space size={8}>
+                <span>当前持仓为示例数据</span>
+                <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+              </Space>
+            }
+            description={(data as AnyData).message || '真实用户持仓待接入。'}
+          />
+        )
+      })()}
 
       <PortfolioSummary data={data} />
 

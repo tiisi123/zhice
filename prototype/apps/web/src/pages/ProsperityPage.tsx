@@ -4,7 +4,9 @@ import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import { RobotOutlined } from '@ant-design/icons'
-import type { AnyData } from '../api/types'
+import type { AnyData, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 const { Title, Paragraph } = Typography
 
@@ -18,12 +20,18 @@ function DiffusionTab() {
   }, [])
 
   if (loading || !data) return <Spin />
+  const meta = extractMeta(data)
   return (
     <div>
       <Alert
         type="info" showIcon style={{ marginBottom: 16 }}
-        message={<span>景气扩散指数：<b style={{ fontSize: 20 }}>{data.diffusion_index}</b></span>}
-        description={`${data.interpretation} · ${data.source || 'unknown'} / ${data.data_status || 'unknown'}${data.message ? `（${data.message}）` : ''}`}
+        message={
+          <Space size={8}>
+            <span>景气扩散指数：<b style={{ fontSize: 20 }}>{data.diffusion_index}</b></span>
+            <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+          </Space>
+        }
+        description={`${data.interpretation}${data.message ? `（${data.message}）` : ''}`}
       />
       <Row gutter={12}>
         <Col span={8}><Card size="small"><Statistic title="上行行业数" value={data.up_count} valueStyle={{ color: '#f5222d' }} /></Card></Col>
@@ -69,16 +77,25 @@ function WeeklyReportTab() {
   return (
     <div>
       <Button type="primary" onClick={gen} loading={loading}>生成本周景气度周报</Button>
-      {data && (
-        <Card style={{ marginTop: 16 }}>
-          <Alert
-            type={data.mock ? 'warning' : 'success'} showIcon style={{ marginBottom: 12 }}
-            message={`扩散指数 ${data.diffusion?.diffusion_index}（${data.diffusion?.interpretation}）`}
-            description={`上行 ${data.diffusion?.up_count} / 下行 ${data.diffusion?.down_count} · 拐点 ${data.turning_points?.length || 0} 个 · ${data.source || 'unknown'} / ${data.data_status || 'unknown'}${data.message ? `（${data.message}）` : ''}`}
-          />
-          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.9 }}>{data.report}</pre>
-        </Card>
-      )}
+      {data && (() => {
+        const meta = extractMeta(data)
+        return (
+          <Card style={{ marginTop: 16 }}>
+            <Alert
+              type={meta.mock ? 'warning' : meta.data_status === 'unavailable' || meta.data_status === 'error' ? 'error' : meta.data_status === 'fallback' ? 'info' : 'success'}
+              showIcon style={{ marginBottom: 12 }}
+              message={
+                <Space size={8}>
+                  <span>{`扩散指数 ${data.diffusion?.diffusion_index}（${data.diffusion?.interpretation}）`}</span>
+                  <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+                </Space>
+              }
+              description={`上行 ${data.diffusion?.up_count} / 下行 ${data.diffusion?.down_count} · 拐点 ${data.turning_points?.length || 0} 个${data.message ? `（${data.message}）` : ''}`}
+            />
+            <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.9 }}>{data.report}</pre>
+          </Card>
+        )
+      })()}
     </div>
   )
 }
@@ -120,16 +137,24 @@ function HistoricalCycleTab() {
         <Input value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="行业名" style={{ width: 180 }} />
         <Button type="primary" onClick={load}>查看历史景气周期</Button>
       </Space>
-      {data && (
-        <>
-          <Alert type="info" showIcon style={{ marginBottom: 12 }}
-            message={<span>当前 <b>{industry}</b> 景气度 <b>{data.current}</b>（近 8 年 <b>{data.percentile}%</b> 分位）</span>}
-            description={`${data.interpretation} · ${data.source || 'unknown'} / ${data.data_status || 'unknown'}${data.message ? `（${data.message}）` : ''}`} />
-          <Card size="small">
-            <div ref={chartRef} style={{ width: '100%', height: 320 }} />
-          </Card>
-        </>
-      )}
+      {data && (() => {
+        const meta = extractMeta(data)
+        return (
+          <>
+            <Alert type="info" showIcon style={{ marginBottom: 12 }}
+              message={
+                <Space size={8}>
+                  <span>当前 <b>{industry}</b> 景气度 <b>{data.current}</b>（近 8 年 <b>{data.percentile}%</b> 分位）</span>
+                  <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+                </Space>
+              }
+              description={`${data.interpretation}${data.message ? `（${data.message}）` : ''}`} />
+            <Card size="small">
+              <div ref={chartRef} style={{ width: '100%', height: 320 }} />
+            </Card>
+          </>
+        )
+      })()}
     </div>
   )
 }

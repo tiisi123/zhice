@@ -3,7 +3,9 @@ import { Alert, Card, Table, Tag, Space, DatePicker, Button, Input, Empty } from
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs, { Dayjs } from 'dayjs'
 import { fetchApi } from '../api/client'
-import type { AnyData } from '../api/types'
+import type { AnyData, ApiMeta, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 interface SeatRow {
   seat: string
@@ -13,13 +15,6 @@ interface SeatRow {
   net: number
   count: number
   stocks: { code?: string; name?: string; stock_code?: string; stock_name?: string; SecurityCode?: string; SecurityName?: string; buy: number; sell: number }[]
-}
-
-interface ApiMeta {
-  source?: string
-  data_status?: string
-  mock?: boolean
-  message?: string
 }
 
 function fmt(v: unknown) {
@@ -44,7 +39,7 @@ export default function LonghuPage() {
   const [rows, setRows] = useState<SeatRow[]>([])
   const [loading, setLoading] = useState(false)
   const [filter, setFilter] = useState('')
-  const [meta, setMeta] = useState<ApiMeta>({})
+  const [meta, setMeta] = useState<ApiMeta | null>(null)
   const [err, setErr] = useState('')
 
   const load = async () => {
@@ -53,11 +48,11 @@ export default function LonghuPage() {
       const r = await fetchApi<{ rank: SeatRow[]; note?: string; source?: string; data_status?: string; mock?: boolean; message?: string }>('/longhu/rank', { date: date.format('YYYY-MM-DD'), top: '50' })
       setRows(r.rank || [])
       setErr('')
-      setMeta({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message || r.note })
+      setMeta(extractMeta({ ...r, message: r.message || r.note }))
     } catch {
       setRows([])
       setErr('龙虎榜接口不可用，当前不展示席位数据。')
-      setMeta({})
+      setMeta(null)
     } finally {
       setLoading(false)
     }
@@ -83,11 +78,13 @@ export default function LonghuPage() {
       </Space>
       {err ? (
         <Alert type="error" showIcon message={err} style={{ marginBottom: 12 }} />
-      ) : (
+      ) : meta && (
         <Alert
-          type={meta.mock ? 'warning' : rows.length ? 'info' : 'warning'}
+          type={meta.mock ? 'warning' : meta.data_status === 'unavailable' || meta.data_status === 'error' ? 'error' : meta.data_status === 'empty' ? 'info' : 'success'}
           showIcon
-          message={`数据源：${meta.source || '未知源'} / 状态：${meta.data_status || '未知状态'}${meta.mock ? ' / mock' : ''}`}
+          message={
+            <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+          }
           description={meta.data_status === 'empty' ? '真实空状态：KPL 龙虎榜接口暂无返回，当前不展示示例席位。' : meta.message}
           style={{ marginBottom: 12 }}
         />

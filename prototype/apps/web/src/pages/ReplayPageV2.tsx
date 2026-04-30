@@ -11,7 +11,9 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
-import type { MarketSummary, LadderData, LimitUpStock, AnyData } from '../api/types'
+import type { MarketSummary, LadderData, LimitUpStock, AnyData, ApiMeta, DataStatus } from '../api/types'
+import { extractMetaList } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 import {
   AIInlineSummary, ContradictionAlert, DeltaIndicator,
   ProgressiveFold, AskAIChip, SectionHeader,
@@ -46,7 +48,6 @@ interface RelayItem {
 interface RelayResp { trade_date: string; prev_date: string | null; relay: RelayItem[]; note?: string }
 interface SentimentHistPoint { date: string; score?: number; limit_up?: number; sentiment?: string }
 interface CapitalItem { name: string; net_flow: number; amount: number; change: number; intensity: number }
-interface ApiMeta { name: string; source?: string; data_status?: string; mock?: boolean; message?: string }
 
 // ========== 配色与工具 ==========
 const SENT_THEME: Record<string, { bg: string; text: string; tag: string; emoji: string }> = {
@@ -61,18 +62,17 @@ function deltaTag(curr: number, prev: number | undefined, opts?: { invert?: bool
   return <DeltaIndicator current={curr} prev={prev} invert={opts?.invert} suffix={opts?.suffix} precision={opts?.precision} />
 }
 
-function metaOf(name: string, resp: AnyData): ApiMeta {
-  return { name, source: resp?.source, data_status: resp?.data_status, mock: resp?.mock, message: resp?.message }
-}
-
 function MetaStrip({ items }: { items: ApiMeta[] }) {
   if (!items.length) return null
   return (
     <Space wrap size={6} style={{ marginBottom: 12 }}>
       {items.map((m) => (
-        <Tag key={m.name} color={m.mock ? 'red' : m.data_status === 'empty' ? 'default' : m.data_status === 'ok' ? 'green' : 'orange'}>
-          {m.name}: {m.source || '未知源'} / {m.data_status || '未知状态'}{m.mock ? ' / mock' : ''}
-        </Tag>
+        <DataStatusBadge
+          key={m.name ?? m.source}
+          status={m.data_status as DataStatus}
+          source={m.source}
+          mock={m.mock}
+        />
       ))}
     </Space>
   )
@@ -1321,16 +1321,16 @@ export default function ReplayPageV2() {
         setSummary(s); setLadder(l); setSectors(sec.data || []); setRelay(r)
         setCapitalFlow(cf?.data || [])
         setPhase(ph); setBrokenData(br); setStrategy(st)
-        setApiMeta([
-          metaOf('市场总览', s),
-          metaOf('连板天梯', l),
-          metaOf('题材', sec),
-          metaOf('接力', r),
-          metaOf('资金', cf),
-          metaOf('情绪', ph),
-          metaOf('炸板', br),
-          metaOf('明日策略', st),
-        ].filter((m) => m.source || m.data_status || m.mock !== undefined))
+        setApiMeta(extractMetaList([
+          { name: '市场总览', resp: s },
+          { name: '连板天梯', resp: l },
+          { name: '题材', resp: sec },
+          { name: '接力', resp: r },
+          { name: '资金', resp: cf },
+          { name: '情绪', resp: ph },
+          { name: '炸板', resp: br },
+          { name: '明日策略', resp: st },
+        ]))
       })
       .catch(() => setErr('复盘接口不可用，当前不展示复盘数据。'))
       .finally(() => setLoading(false))

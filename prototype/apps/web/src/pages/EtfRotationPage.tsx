@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Card, Col, Row, Select, Spin, Statistic, Table, Tabs, Tag } from 'antd'
+import { Alert, Card, Col, Row, Select, Space, Spin, Statistic, Table, Tabs, Tag } from 'antd'
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
-import type { AnyData } from '../api/types'
+import type { AnyData, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 type StageType = '加速' | '启动' | '蓄势' | '分歧' | '退潮'
 
@@ -275,13 +277,23 @@ export default function EtfRotationPage() {
 
   return (
     <div>
-      <Alert
-        type={dashboard.mock ? 'warning' : dashboard.data_status === 'partial' ? 'info' : 'success'}
-        showIcon
-        style={{ marginBottom: 12 }}
-        message={`ETF 数据状态：${dashboard.source || dashboard.data_mode} / ${dashboard.data_status || dashboard.data_mode}`}
-        description={dashboard.message || 'ETF 看板包含行情数据、资金 proxy 和规则评分，推演结果仅供研究参考。'}
-      />
+      {(() => {
+        const meta = extractMeta(dashboard)
+        return (
+          <Alert
+            type={meta.mock ? 'warning' : meta.data_status === 'unavailable' || meta.data_status === 'error' ? 'error' : meta.data_status === 'fallback' ? 'info' : 'success'}
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={
+              <Space size={8}>
+                <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+                <span style={{ fontSize: 12, color: '#888' }}>data_mode: {dashboard.data_mode}</span>
+              </Space>
+            }
+            description={dashboard.message || 'ETF 看板包含行情数据、资金 proxy 和规则评分，推演结果仅供研究参考。'}
+          />
+        )
+      })()}
 
       <Row gutter={[16, 16]}>
         <Col span={4}><Card size="small"><Statistic title="ETF池" value={s.etf_count} /></Card></Col>

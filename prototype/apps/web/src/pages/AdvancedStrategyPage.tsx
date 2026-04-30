@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { Card, Col, Row, Table, Statistic, Button, Select, Input, message, Popconfirm } from 'antd'
+import { Card, Col, Row, Space, Table, Statistic, Button, Select, Input, message, Popconfirm } from 'antd'
 import { postApi, deleteApi, fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
-import type { AnyData } from '../api/types'
+import type { AnyData, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 export default function AdvancedStrategyPage() {
   const [optResult, setOptResult] = useState<AnyData>(null)
@@ -125,6 +127,21 @@ export default function AdvancedStrategyPage() {
             </div>
             {optResult && (
               <>
+                {(() => {
+                  const meta = extractMeta(optResult)
+                  return (
+                    <Space style={{ marginBottom: 8 }} size={6}>
+                      <DataStatusBadge
+                        status={meta.data_status as DataStatus}
+                        source={meta.source}
+                        mock={meta.mock}
+                      />
+                      {optResult.message && (
+                        <span style={{ fontSize: 12, color: '#888' }}>{String(optResult.message)}</span>
+                      )}
+                    </Space>
+                  )
+                })()}
                 <p>共测试 {optResult.total_combinations} 种参数组合</p>
                 <h4>最佳 5 组</h4>
                 <Table dataSource={optResult.best_5} columns={optCols} rowKey={(_, i) => String(i)} size="small" pagination={false} />
