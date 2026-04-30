@@ -13,6 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_dfcf, get_kpl
 
 logger = logging.getLogger(__name__)
@@ -29,8 +30,21 @@ def news_flash(n: int = Query(40, ge=10, le=100)):
         items = _dfcf.get_news_flash(n=n) or []
     except Exception as e:
         logger.exception("news_flash failed")
-        raise HTTPException(status_code=502, detail=f"快讯数据获取失败: {e}")
-    return {"items": items, "total": len(items)}
+        return wrap_contract(
+            [],
+            source="eastmoney_news",
+            status="unavailable",
+            message=f"快讯数据获取失败: {e}",
+            items=[],
+            total=0,
+        )
+    return wrap_contract(
+        items,
+        source="eastmoney_news",
+        status="real",
+        items=items,
+        total=len(items),
+    )
 
 
 def _extract_sector_names(sectors: list[dict]) -> list[str]:
@@ -80,12 +94,21 @@ def news_timeline(
     抓取最近快讯，并基于关键词与当日题材列表进行关联，返回时间线。
     每条快讯标注：matched_themes（命中的板块名）、matched_stocks（提及的个股）。
     """
+    today = datetime.now().strftime("%Y-%m-%d")
     try:
         raw = _dfcf.get_news_flash(n=n) or []
     except Exception as e:
         logger.exception("news_timeline flash fetch failed")
-        raise HTTPException(status_code=502, detail=f"快讯数据获取失败: {e}")
-    today = datetime.now().strftime("%Y-%m-%d")
+        return wrap_contract(
+            [],
+            source="eastmoney_news",
+            status="unavailable",
+            message=f"快讯数据获取失败: {e}",
+            items=[],
+            total=0,
+            trade_date=today,
+            available_themes=0,
+        )
     sectors = _get_today_sectors(today)
     theme_names = _extract_sector_names(sectors)
     # 简单子串匹配：题材名出现在 title 或 summary 中即视为相关
@@ -102,12 +125,15 @@ def news_timeline(
             "matched_stocks": matched_stocks[:8],
             "stocks": matched_stocks[:8],
         })
-    return {
-        "items": items,
-        "total": len(items),
-        "trade_date": today,
-        "available_themes": len(theme_names),
-    }
+    return wrap_contract(
+        items,
+        source="eastmoney_news",
+        status="real",
+        items=items,
+        total=len(items),
+        trade_date=today,
+        available_themes=len(theme_names),
+    )
 
 
 # ============== AI：从新闻文本反查受益题材/个股 ==============

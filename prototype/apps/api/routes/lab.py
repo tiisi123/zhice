@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from apps.api.auth import current_user, consume_quota, update_style
 from apps.api.db import execute, query_one, query_all
+from apps.api.utils.contract import wrap_contract
 from packages.backtest.dsl_schema import StrategyDSL, STRATEGY_TEMPLATES
 from packages.backtest.engine import BacktestEngine
 from packages.connectors.registry import get_kpl
@@ -87,16 +88,32 @@ class AlertRule(BaseModel):
 
 @router.get("/alert-rules")
 def list_rules(user: dict = Depends(current_user)):
-    rows = query_all(
-        "SELECT id, name, kind, rules, enabled, created_at FROM alert_rules WHERE user_id=? ORDER BY id DESC",
-        (user["id"],),
-    )
+    try:
+        rows = query_all(
+            "SELECT id, name, kind, rules, enabled, created_at FROM alert_rules WHERE user_id=? ORDER BY id DESC",
+            (user["id"],),
+        )
+    except Exception as e:
+        return wrap_contract(
+            [],
+            source="mysql_lab",
+            status="unavailable",
+            message=f"获取告警规则失败: {str(e)}",
+            items=[],
+            count=0,
+        )
     for r in rows:
         try:
             r["rules"] = json.loads(r["rules"])
         except Exception:
             r["rules"] = {}
-    return {"items": rows}
+    return wrap_contract(
+        rows,
+        source="mysql_lab",
+        status="real",
+        items=rows,
+        count=len(rows),
+    )
 
 
 @router.post("/alert-rules")
@@ -160,13 +177,35 @@ _ALLOWED = {"short", "hot", "growth", "value"}
 
 @router.get("/style-combo")
 def get_combo(user: dict = Depends(current_user)):
-    row = query_one("SELECT styles FROM style_combo WHERE user_id=?", (user["id"],))
-    if not row:
-        return {"styles": [user["style"]]}
     try:
-        return {"styles": json.loads(row["styles"])}
+        row = query_one("SELECT styles FROM style_combo WHERE user_id=?", (user["id"],))
+    except Exception as e:
+        fallback = [user["style"]]
+        return wrap_contract(
+            fallback,
+            source="mysql_lab",
+            status="unavailable",
+            message=f"获取风格组合失败: {str(e)}",
+            styles=fallback,
+        )
+    if not row:
+        styles = [user["style"]]
+        return wrap_contract(
+            styles,
+            source="mysql_lab",
+            status="real",
+            styles=styles,
+        )
+    try:
+        styles = json.loads(row["styles"])
     except Exception:
-        return {"styles": [user["style"]]}
+        styles = [user["style"]]
+    return wrap_contract(
+        styles,
+        source="mysql_lab",
+        status="real",
+        styles=styles,
+    )
 
 
 @router.post("/style-combo")

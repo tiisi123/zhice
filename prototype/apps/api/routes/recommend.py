@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from apps.api.auth import current_user
 from apps.api.db import _DB_PATH
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.market import build_market_summary
 
@@ -151,7 +152,13 @@ def _style_from_behavior(user_id: int) -> dict[str, int]:
 
 @router.get("/templates")
 def templates():
-    return {"templates": TEMPLATES}
+    return wrap_contract(
+        TEMPLATES,
+        source="static_recommend_templates",
+        status="real",
+        templates=TEMPLATES,
+        count=len(TEMPLATES),
+    )
 
 
 # ============== 市场情绪适配 ==============
@@ -328,7 +335,7 @@ def recommend(user: dict = Depends(current_user)):
             "reasons": reasons,
         })
     scored.sort(key=lambda x: x["score"], reverse=True)
-    return {
+    payload: dict = {
         "primary_style": style,
         "secondary_style": secondary,
         "style_combo": style_combo,
@@ -348,6 +355,12 @@ def recommend(user: dict = Depends(current_user)):
             "risk_match": 0.3,
         },
     }
+    return wrap_contract(
+        payload,
+        source="kpl_recommend",
+        status="real",
+        **payload,
+    )
 
 
 # ============== AI 推荐理由（缓存 5 分钟） ==============
@@ -404,17 +417,23 @@ def explain(template_id: str, user: dict = Depends(current_user)):
 3. **执行要点**（仓位/止损/触发信号）
 
 语气精炼专业，不要套话。"""
+    explain_status = "real"
+    explain_message = ""
     try:
         future = _explain_executor.submit(llm.chat, prompt)
         text = future.result(timeout=_EXPLAIN_TIMEOUT_SEC)
     except FutureTimeout:
         logger.warning("recommend explain timed out after %ss", _EXPLAIN_TIMEOUT_SEC)
         text = "AI 解读暂时繁忙，请稍后重试。策略推荐列表不受影响。"
+        explain_status = "unavailable"
+        explain_message = f"AI 解读超时（>{_EXPLAIN_TIMEOUT_SEC}s）"
     except Exception as e:
         logger.exception("explain LLM failed")
         text = f"AI 解读暂不可用：{e}"
+        explain_status = "unavailable"
+        explain_message = f"AI 解读失败：{e}"
 
-    result = {
+    payload = {
         "template_id": template_id,
         "name": template["name"],
         "explanation": text,
@@ -422,5 +441,12 @@ def explain(template_id: str, user: dict = Depends(current_user)):
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "disclaimer": "AI 生成，不构成投资建议。",
     }
+    result = wrap_contract(
+        payload,
+        source="llm_recommend",
+        status=explain_status,
+        message=explain_message,
+        **payload,
+    )
     _explain_cache[cache_key] = (now, result)
     return result

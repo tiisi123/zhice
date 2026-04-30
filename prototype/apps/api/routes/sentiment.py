@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.market import build_market_summary
 
@@ -65,9 +66,20 @@ def sentiment_history(days: int = Query(30)):
                 pass
 
         recent = records[-days:] if len(records) > days else records
-        return {"count": len(recent), "data": recent}
+        return wrap_contract(
+            recent,
+            source="kpl_sentiment",
+            status="real",
+            count=len(recent),
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取情绪历史失败: {str(e)}")
+        return wrap_contract(
+            [],
+            source="kpl_sentiment",
+            status="unavailable",
+            message=f"获取情绪历史失败: {str(e)}",
+            count=0,
+        )
 
 
 # ==================== 周期相位定位 ====================
@@ -124,9 +136,23 @@ def sentiment_phase():
     try:
         records = _load_history()
         phase = _infer_phase(records)
-        return phase
+        status = "empty" if not records else "real"
+        return wrap_contract(
+            phase,
+            source="kpl_sentiment",
+            status=status,
+            **phase,
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"相位推断失败: {str(e)}")
+        return wrap_contract(
+            {},
+            source="kpl_sentiment",
+            status="unavailable",
+            message=f"相位推断失败: {str(e)}",
+            phase="未知",
+            confidence=0.0,
+            basis="推断异常",
+        )
 
 
 # ==================== 历史相似日检索 ====================
@@ -159,11 +185,15 @@ def similar_days(
     try:
         records = _load_history()
         if len(records) < 10:
-            return {
-                "target": None,
-                "matches": [],
-                "note": f"历史样本不足（{len(records)} 日），需累积 ≥10 日",
-            }
+            return wrap_contract(
+                [],
+                source="kpl_sentiment",
+                status="empty",
+                message=f"历史样本不足（{len(records)} 日），需累积 ≥10 日",
+                target=None,
+                matches=[],
+                note=f"历史样本不足（{len(records)} 日），需累积 ≥10 日",
+            )
         idx_by_date = {r["date"]: i for i, r in enumerate(records)}
         target_date = date or records[-1]["date"]
         if target_date not in idx_by_date:
@@ -216,9 +246,21 @@ def similar_days(
                 },
             })
 
-        return {
-            "target": {"date": target_date, **target},
-            "matches": matches,
-        }
+        return wrap_contract(
+            matches,
+            source="kpl_sentiment",
+            status="real",
+            target={"date": target_date, **target},
+            matches=matches,
+            count=len(matches),
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"相似日检索失败: {str(e)}")
+        return wrap_contract(
+            [],
+            source="kpl_sentiment",
+            status="unavailable",
+            message=f"相似日检索失败: {str(e)}",
+            target=None,
+            matches=[],
+            count=0,
+        )
