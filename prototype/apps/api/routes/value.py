@@ -99,22 +99,49 @@ def _fetch_tushare_financial(code: str) -> Optional[dict]:
         return None
 
 
-def _get_best_financial(code: str) -> Optional[dict]:
+def _get_best_financial_with_status(code: str) -> tuple[Optional[dict], bool]:
+    """Returns (financial_data, tushare_attempted_failed).
+
+    tushare_attempted_failed=True iff TUSHARE was configured (token set) but the call
+    yielded no usable data (network error, bad token, or empty response). Lets the
+    caller surface D004 'fallback' instead of silently returning 'mock'.
+    """
     fin = get_financial(code)
     if not fin or fin.get("data_source") == "mock":
-        ts_fin = _fetch_tushare_financial(code)
-        if ts_fin:
-            return ts_fin
+        try:
+            from packages.connectors.registry import get_tushare
+
+            ts = get_tushare()
+            if ts.configured:
+                ts_fin = _fetch_tushare_financial(code)
+                if ts_fin:
+                    return ts_fin, False
+                return fin, True
+        except Exception:
+            return fin, True
+    return fin, False
+
+
+def _get_best_financial(code: str) -> Optional[dict]:
+    fin, _ = _get_best_financial_with_status(code)
     return fin
 
 
 @router.get("/financial/{code}")
 def financial_detail(code: str):
     try:
-        fin = _get_best_financial(code)
+        fin, tushare_failed = _get_best_financial_with_status(code)
         if not fin:
             raise HTTPException(status_code=404, detail=f"暂无 {code} 的财务数据")
         src, sample_mode, msg = _financial_meta_d004(fin)
+        if tushare_failed and sample_mode:
+            return wrap_contract(
+                fin,
+                source=src,
+                status="fallback",
+                mock=False,
+                message="TUSHARE 数据源不可用（token 失效或网络问题），已降级为样例财务数据",
+            )
         return wrap_contract(
             fin,
             source=src,

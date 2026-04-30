@@ -55,7 +55,13 @@ def headline(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     cached = _headline_cache.get_or_none(trade_date)
     if cached is not None:
-        return {"trade_date": trade_date, "headline": cached}
+        return wrap_contract(
+            cached,
+            source="kpl+llm",
+            status="real",
+            trade_date=trade_date,
+            headline=cached,
+        )
     try:
         kpl_stats = _kpl.get_market_statistics(trade_date)
         limit_up = _kpl.get_limit_up(trade_date)
@@ -72,9 +78,14 @@ def headline(date: Optional[str] = Query(None)):
         text = llm.chat(MARKET_HEADLINE.format(context=context))
         text = text.strip().strip("「」""''")
         _headline_cache.put(trade_date, text)
-        return {"trade_date": trade_date, "headline": text}
+        return wrap_contract(
+            text,
+            source="kpl+llm",
+            status="real",
+            trade_date=trade_date,
+            headline=text,
+        )
     except Exception:
-        sent = "—"
         try:
             kpl_stats = _kpl.get_market_statistics(trade_date)
             limit_up = _kpl.get_limit_up(trade_date)
@@ -89,9 +100,23 @@ def headline(date: Optional[str] = Query(None)):
             if top_sector:
                 text += f"，{top_sector}领涨"
             _headline_cache.put(trade_date, text)
-            return {"trade_date": trade_date, "headline": text}
+            return wrap_contract(
+                text,
+                source="kpl",
+                status="fallback",
+                message="LLM 不可用，已降级为 KPL 规则速报",
+                trade_date=trade_date,
+                headline=text,
+            )
         except Exception:
-            return {"trade_date": trade_date, "headline": ""}
+            return wrap_contract(
+                "",
+                source="kpl",
+                status="unavailable",
+                message="KPL/LLM 均不可用",
+                trade_date=trade_date,
+                headline="",
+            )
 
 
 @router.get("/replay-report")
@@ -121,7 +146,14 @@ def replay_report(date: Optional[str] = Query(None), user: dict = Depends(consum
             )
         except Exception:
             pass
-        return {"trade_date": trade_date, "summary": summary, "report": report}
+        return wrap_contract(
+            report,
+            source="kpl+llm",
+            status="real",
+            trade_date=trade_date,
+            summary=summary,
+            report=report,
+        )
     except HTTPException:
         raise
     except Exception:

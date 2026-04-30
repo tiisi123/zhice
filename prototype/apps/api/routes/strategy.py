@@ -20,7 +20,12 @@ def list_templates():
     result = {}
     for name, dsl in STRATEGY_TEMPLATES.items():
         result[name] = dsl.model_dump(by_alias=True, exclude_none=True)
-    return {"templates": result}
+    return wrap_contract(
+        result,
+        source="static_strategy_templates",
+        status="real",
+        templates=result,
+    )
 
 
 @router.post("/run")

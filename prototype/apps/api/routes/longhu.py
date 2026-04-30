@@ -69,7 +69,12 @@ def _allocate(rows: list[dict]) -> list[dict]:
 
 @router.get("/seats")
 def known_seats():
-    return {"seats": FAMOUS_SEATS}
+    return wrap_contract(
+        FAMOUS_SEATS,
+        source="kpl_longhu_bang",
+        status="real",
+        seats=FAMOUS_SEATS,
+    )
 
 
 @router.get("/rank")

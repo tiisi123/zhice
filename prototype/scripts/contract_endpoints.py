@@ -79,14 +79,19 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/growth/rotation", "static_rotation_rules"),
     # ── /api/value/*
     ("/api/value/screen", "sample_financials"),
-    ("/api/value/diffusion", "static_industry_prosperity"),
-    ("/api/value/turning-points", "static_industry_prosperity"),
-    ("/api/value/weekly-report", "static_industry_prosperity"),
+    # diffusion / turning-points / weekly-report 的 source 形如
+    # "static_industry_prosperity+diffusion_rule"——base 数据 + 规则/llm 派生层。
+    # 用空串 sentinel 仅校验 source 非空，不绑定具体派生后缀。
+    ("/api/value/diffusion", ""),
+    ("/api/value/turning-points", ""),
+    ("/api/value/weekly-report", ""),
     # ── /api/strategy/*
     ("/api/strategy/templates", ""),  # tushare 或 sample（CI 无 token 时切样例）
     # ── /api/ai/*
-    ("/api/ai/headline", "kpl"),
-    ("/api/ai/replay-report", "kpl"),
+    # AI 端点 source 形如 "kpl+llm" (real path) 或 "kpl" (fallback)；用空串 sentinel
+    # 仅校验非空，不绑定具体 LLM 拼接形式。
+    ("/api/ai/headline", ""),
+    ("/api/ai/replay-report", ""),
     # ── /api/etf/* （source 来自 data.data_source，CI 默认 sample_engine）
     ("/api/etf/rotation/dashboard", ""),
     # ── /api/lab/* （需 JWT；check_api_contract 会先 register 取 token）
@@ -117,6 +122,7 @@ EXEMPT_ENDPOINTS: list[tuple[str, str]] = [
 AUTH_REQUIRED_PATHS: set[str] = {
     "/api/lab/alert-rules",
     "/api/lab/style-combo",
+    "/api/ai/replay-report",  # consume_quota('ai_report') 依赖 JWT
 }
 
 
