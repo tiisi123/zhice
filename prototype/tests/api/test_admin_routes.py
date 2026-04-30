@@ -232,30 +232,53 @@ def test_admin_kpl_cookie_post_requires_admin(admin_ctx):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/admin/health/kpl  (T05 health module deliberately not yet integrated)
+# GET /api/admin/health/kpl  (T05 wired in — admin route now reads _HEALTH_CACHE)
 # ---------------------------------------------------------------------------
 
 
-def test_admin_health_kpl_falls_back_when_t05_absent(admin_ctx):
-    """T05 ``kpl_health`` module not present → unknown status, no 5xx."""
+def test_admin_health_kpl_returns_cache_state(admin_ctx, monkeypatch):
+    """T05 present → admin route returns the in-memory cache shape."""
+    from apps.api.services import kpl_health
+
+    monkeypatch.setattr(
+        kpl_health,
+        "get_health_cache",
+        lambda: {
+            "realtime": {"status": "ok", "last_ok_at": "2026-05-01 12:00:00",
+                         "last_error": None, "consecutive_fail": 0},
+            "history": {"status": "fail", "last_ok_at": None,
+                        "last_error": "cookie_missing", "consecutive_fail": 0},
+        },
+    )
+
     client = _client(admin_ctx, _ADMIN_USER)
     resp = client.get("/api/admin/health/kpl")
     assert resp.status_code == 200
     body = resp.json()
-    assert body == {
-        "realtime": {"status": "unknown"},
-        "history": {"status": "unknown"},
-    }
+    assert body["realtime"]["status"] == "ok"
+    assert body["history"]["status"] == "fail"
+    assert body["history"]["last_error"] == "cookie_missing"
 
 
-def test_admin_health_kpl_trigger_falls_back_when_t05_absent(admin_ctx):
-    """T05 module missing → success:True, triggered:False (admin gets a clear signal)."""
+def test_admin_health_kpl_trigger_runs_probes(admin_ctx, monkeypatch):
+    """T05 present → admin POST trigger calls trigger_health_probe_now('all')."""
+    from apps.api.services import kpl_health
+
+    calls: list[str] = []
+
+    def fake_trigger(scope: str = "all") -> dict:
+        calls.append(scope)
+        return {"realtime": {"status": "ok"}, "history": {"status": "ok"}}
+
+    monkeypatch.setattr(kpl_health, "trigger_health_probe_now", fake_trigger)
+
     client = _client(admin_ctx, _ADMIN_USER)
     resp = client.post("/api/admin/health/kpl/trigger")
     assert resp.status_code == 200
     body = resp.json()
     assert body["success"] is True
-    assert body["triggered"] is False
+    assert body["triggered"] is True
+    assert calls == ["all"]
 
 
 # ---------------------------------------------------------------------------

@@ -172,6 +172,20 @@ def health():
     }
 
 
+@app.get("/api/health/kpl")
+def health_kpl():
+    """KPL realtime/history dual probe state (M001/S03/T05).
+
+    Public — no auth — by design: the business owner needs to spot a red light
+    from the homepage without admin login. The response intentionally excludes
+    cookie material; only ``status`` / ``last_ok_at`` / ``last_error`` /
+    ``consecutive_fail`` per probe are exposed (see ``kpl_health.py``).
+    """
+    from .services.kpl_health import get_health_cache
+
+    return get_health_cache()
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.exception("Unhandled exception on %s %s", request.method, request.url.path)

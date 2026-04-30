@@ -397,6 +397,29 @@ if _HAS_APSCHEDULER:
         replace_existing=True,
     )
 
+    # M001/S03/T05: KPL realtime/history 健康双探测，30 分钟一次。
+    # max_instances=1 + coalesce=True：单 worker 跑长时不会堆叠多个实例，
+    # APScheduler 漏触发后 catch-up 时也只跑 1 次（避免 Cookie 一短期失效就
+    # 写一坨重复 system_alerts 行 / 一封邮件被发 N 次）。
+    from apps.api.services.kpl_health import probe_history, probe_realtime
+
+    scheduler.add_job(
+        probe_realtime,
+        IntervalTrigger(minutes=30),
+        id="kpl_realtime_health",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    scheduler.add_job(
+        probe_history,
+        IntervalTrigger(minutes=30),
+        id="kpl_history_health",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
 
 def start_scheduler():
     if not _HAS_APSCHEDULER:
@@ -404,7 +427,10 @@ def start_scheduler():
         return
     if scheduler and not scheduler.running:
         scheduler.start()
-        logger.info("Scheduler started: pull_market_snapshot @15:30, pull_sentiment_record @15:35")
+        logger.info(
+            "Scheduler started: pull_market_snapshot @15:30, pull_sentiment_record @15:35"
+            " + kpl_realtime_health/kpl_history_health @30min"
+        )
 
 
 def stop_scheduler():
