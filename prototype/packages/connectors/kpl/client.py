@@ -8,11 +8,13 @@ from typing import Optional
 import httpx
 
 from .endpoints import (
+    HOST_MAP,
     KPL_HISTORY_HOST,
     KPL_MERGE_HOST,
     KPL_REALTIME_HOST,
-    HOST_MAP,
 )
+from .history_client import KplHistoryClient
+from .realtime_client import KplRealtimeClient
 
 logger = logging.getLogger(__name__)
 
@@ -98,112 +100,158 @@ def _em_price(value) -> float:
     return round(price / 1000, 2) if price > 1000 else price
 
 
+def _is_sentinel(resp) -> bool:
+    return isinstance(resp, dict) and bool(resp.get("_error"))
+
+
+def _extract_list(resp) -> list:
+    if not isinstance(resp, dict) or _is_sentinel(resp):
+        return []
+    return resp.get("list", []) or []
+
+
 class KplClient:
+    """c1 facade: shared cookie across realtime/history/merge hosts.
+
+    Constructs internal KplRealtimeClient + KplHistoryClient with the same
+    cookie. Legacy 9-method signatures are preserved by delegating to the
+    appropriate split client based on whether trade_date is today.
+    """
+
     def __init__(
         self,
         user_id: str = "",
         token: str = "",
         device_id: str = "",
-        version: str = "10.1.1",
+        version: str = "5.17.0.0",
+        cookie: str = "",
     ):
         self.user_id = user_id
         self.token = token
         self.device_id = device_id
         self.version = version
+        self.cookie = cookie or ""
+        self._realtime = KplRealtimeClient(
+            cookie=self.cookie,
+            user_id=user_id,
+            token=token,
+            device_id=device_id,
+            version=version,
+        )
+        self._history = KplHistoryClient(
+            cookie=self.cookie,
+            user_id=user_id,
+            token=token,
+            device_id=device_id,
+            version=version,
+        )
+        # Merge host (LongHuBang + 公开 EM API) keeps its own httpx.Client
         self._client = httpx.Client(timeout=15, verify=False)
 
-    def _headers(self, host_key: str = "realtime") -> dict:
+    def _headers(self, host_key: str = "merge") -> dict:
         h = _DEFAULT_HEADERS.copy()
-        h["Host"] = HOST_MAP.get(host_key, HOST_MAP["realtime"])
+        h["Host"] = HOST_MAP.get(host_key, HOST_MAP["merge"])
+        if self.cookie:
+            h["Cookie"] = self.cookie
         return h
 
-    def _post(self, url: str, data: dict, host_key: str = "realtime") -> dict:
-        if not self.user_id and not self.device_id:
-            logger.warning("KPL credentials not configured, returning empty data")
-            return {}
+    def _post(self, url: str, data: dict, host_key: str = "merge") -> dict:
+        if not self.cookie:
+            logger.info(
+                "KPL merge _post short-circuit: cookie_missing endpoint=%s a=%s",
+                url,
+                data.get("a", ""),
+            )
+            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
             return resp.json()
+        except httpx.HTTPStatusError as e:
+            http_code = e.response.status_code if e.response is not None else 0
+            logger.warning(
+                "KPL merge upstream %s: endpoint=%s a=%s",
+                http_code,
+                url,
+                data.get("a", ""),
+            )
+            return {"_error": "kpl_upstream_error", "http_code": http_code}
         except Exception as e:
-            logger.warning("KPL request failed: %s %s -> %s", url, data.get("a", ""), e)
+            logger.warning(
+                "KPL merge request failed: endpoint=%s a=%s -> %s",
+                url,
+                data.get("a", ""),
+                e,
+            )
             return {}
 
-    def _get_public_json(self, url: str, params: dict | None = None, headers: dict | None = None) -> dict:
+    def _get_public_json(
+        self, url: str, params: dict | None = None, headers: dict | None = None
+    ) -> dict:
         try:
-            resp = self._client.get(url, params=params or {}, headers=headers or _EM_HEADERS)
+            resp = self._client.get(
+                url, params=params or {}, headers=headers or _EM_HEADERS
+            )
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
             logger.warning("KPL public GET failed: %s -> %s", url, e)
             return {}
 
-    def _post_public_json(self, url: str, json_data: dict, headers: dict | None = None) -> dict:
+    def _post_public_json(
+        self, url: str, json_data: dict, headers: dict | None = None
+    ) -> dict:
         try:
-            resp = self._client.post(url, json=json_data, headers=headers or _EM_HEADERS)
+            resp = self._client.post(
+                url, json=json_data, headers=headers or _EM_HEADERS
+            )
             resp.raise_for_status()
             return resp.json()
         except Exception as e:
             logger.warning("KPL public POST failed: %s -> %s", url, e)
             return {}
 
-    def _base_params(self, **extra) -> dict:
-        params = {
-            "PhoneOSNew": "1",
-            "DeviceID": self.device_id,
-            "VerSion": self.version,
-            "apiv": "w38",
-        }
-        params.update(extra)
-        return params
-
     def _is_today(self, date_str: Optional[str]) -> bool:
         if not date_str:
             return True
         return date_str == datetime.now().strftime("%Y-%m-%d")
 
-    # --- Phase 1 核心接口 ---
+    # --- legacy 9-method signature delegation ---
 
     def get_market_statistics(self, trade_date: str) -> list[dict]:
-        data = self._base_params(
-            a="MarketStatistics",
-            c="HisHomeDingPan",
-            Day=trade_date,
-        )
-        result = self._post(KPL_HISTORY_HOST, data, "history")
-        info = result.get("info")
+        resp = self._history.get_market_statistics(trade_date)
+        if _is_sentinel(resp):
+            return []
+        info = resp.get("info") if isinstance(resp, dict) else None
         if not info:
             return []
-
         row = {f"market_{k.lower()}": v for k, v in info.items()}
-
-        strong_data = self._base_params(
-            a="DiskReview",
-            c="HisHomeDingPan",
-            Day=trade_date,
+        # 二次 DiskReview 拿 strong 字段 (legacy behavior preserved)
+        strong_resp = self._history._post(
+            KPL_HISTORY_HOST,
+            self._history._base_params(
+                a="DiskReview",
+                c="HisHomeDingPan",
+                Day=trade_date,
+            ),
+            "history",
         )
-        strong_resp = self._post(KPL_HISTORY_HOST, strong_data, "history")
-        strong_info = strong_resp.get("info", {})
-        row["market_strong"] = strong_info.get("strong", 0)
+        if isinstance(strong_resp, dict) and not _is_sentinel(strong_resp):
+            row["market_strong"] = (strong_resp.get("info") or {}).get("strong", 0)
         return [row]
 
     def get_concept_selected(
         self, trade_date: Optional[str] = None, index: int = 0, order: str = "0"
     ) -> list[dict]:
-        is_today = self._is_today(trade_date)
-        data = self._base_params(
-            a="ConceptSelected",
-            c="HomeDingPan" if is_today else "HisHomeDingPan",
-            Order=order,
-            st="20",
-            Index=str(index),
-        )
-        if not is_today and trade_date:
-            data["Date"] = trade_date
-        host = "realtime" if is_today else "history"
-        return self._post(
-            KPL_REALTIME_HOST if is_today else KPL_HISTORY_HOST, data, host
-        ).get("list", [])
+        try:
+            order_int = int(order)
+        except (TypeError, ValueError):
+            order_int = 0
+        if self._is_today(trade_date):
+            resp = self._realtime.get_concept_selected(index=index, order=order_int)
+        else:
+            resp = self._history.get_concept_selected_history(trade_date, index=index)
+        return _extract_list(resp)
 
     def get_concept_detail(
         self,
@@ -211,83 +259,59 @@ class KplClient:
         trade_date: Optional[str] = None,
         index: int = 0,
     ) -> list[dict]:
-        is_today = self._is_today(trade_date)
-        data = self._base_params(
-            a="ConceptDetail",
-            c="HomeDingPan" if is_today else "HisHomeDingPan",
-            PlateID=plate_id,
-            Order="0",
-            st="60",
-            Index=str(index),
-        )
-        if not is_today and trade_date:
-            data["Date"] = trade_date
-        host = "realtime" if is_today else "history"
-        return self._post(
-            KPL_REALTIME_HOST if is_today else KPL_HISTORY_HOST, data, host
-        ).get("list", [])
+        if self._is_today(trade_date):
+            resp = self._realtime.get_concept_detail(plate_id, index=index)
+        else:
+            resp = self._history.get_concept_detail_history(
+                plate_id, trade_date, index=index
+            )
+        return _extract_list(resp)
 
     def get_concept_subsection(
         self, plate_id: str, trade_date: Optional[str] = None
     ) -> list[dict]:
-        is_today = self._is_today(trade_date)
-        data = self._base_params(
-            a="ConceptSubsection",
-            c="HomeDingPan" if is_today else "HisHomeDingPan",
-            PlateID=plate_id,
-            IsShow="1",
-        )
-        if not is_today and trade_date:
-            data["Date"] = trade_date
-        host = "realtime" if is_today else "history"
-        return self._post(
-            KPL_REALTIME_HOST if is_today else KPL_HISTORY_HOST, data, host
-        ).get("list", [])
+        if self._is_today(trade_date):
+            resp = self._realtime.get_concept_subsection(plate_id)
+            return _extract_list(resp)
+        # daban_pc historical SonPlate_Info not exposed; return [] safely
+        return []
 
     def get_limit_performance(
         self, trade_date: str, daily_limit: bool = True, order: str = "0"
     ) -> list[dict]:
-        data = self._base_params(
-            a="DailyLimitPerformance" if daily_limit else "DailyLimitPerformance2",
-            c="HisHomeDingPan",
-            Order=order,
-            st="20",
-            Day=trade_date,
+        try:
+            order_int = int(order)
+        except (TypeError, ValueError):
+            order_int = 0
+        resp = self._history.get_limit_performance(
+            trade_date, daily_limit=daily_limit, order=order_int
         )
-        return self._post(KPL_HISTORY_HOST, data, "history").get("list", [])
+        return _extract_list(resp)
 
     def get_theme_list(self, trade_date: str) -> list[dict]:
-        data = self._base_params(
-            a="HomeThemeList",
-            c="HisHomeDingPan",
-        )
-        result = self._post(KPL_HISTORY_HOST, data, "history")
-        return result.get("list", [])
+        resp = self._history.get_theme_list(trade_date)
+        return _extract_list(resp)
 
     def get_theme_detail(self, theme_id: str) -> dict:
-        data = self._base_params(
+        data = self._realtime._base_params(
             a="HomeThemeDetail",
             c="HomeDingPan",
             ID=theme_id,
             Token=self.token,
             UserID=self.user_id,
         )
-        return self._post(KPL_REALTIME_HOST, data, "realtime")
+        # Theme detail is realtime endpoint — delegate via realtime _post
+        resp = self._realtime._post(KPL_REALTIME_HOST, data, "realtime")
+        if _is_sentinel(resp):
+            return {}
+        return resp if isinstance(resp, dict) else {}
 
     def get_market_anomaly(self, trade_date: Optional[str] = None) -> list[dict]:
-        is_today = self._is_today(trade_date)
-        data = self._base_params(
-            a="MarketAnomaly",
-            c="HomeDingPan" if is_today else "HisHomeDingPan",
-            Index="0",
-            st="100",
-        )
-        if not is_today and trade_date:
-            data["Date"] = trade_date
-        host = "realtime" if is_today else "history"
-        return self._post(
-            KPL_REALTIME_HOST if is_today else KPL_HISTORY_HOST, data, host
-        ).get("list", [])
+        if not self._is_today(trade_date):
+            # daban_pc historical Radar 不开放，返 [] 安全
+            return []
+        resp = self._realtime.get_market_anomaly()
+        return _extract_list(resp)
 
     def _get_em_pool(self, url: str, trade_date: Optional[str] = None) -> list[dict]:
         params = {
@@ -308,7 +332,9 @@ class KplClient:
         industry = row.get("hybk") or row.get("industry") or ""
         concepts = row.get("gn") or row.get("concepts") or row.get("related_plates") or []
         if isinstance(concepts, str):
-            related = [x.strip() for x in concepts.replace("、", ",").split(",") if x.strip()]
+            related = [
+                x.strip() for x in concepts.replace("、", ",").split(",") if x.strip()
+            ]
         elif isinstance(concepts, list):
             related = [
                 str(x.get("name") or x.get("plate_name") or x).strip()
@@ -415,20 +441,22 @@ class KplClient:
             code = str(row.get("f12") or "")[:6]
             if not code:
                 continue
-            result.append({
-                "stock_code": code,
-                "stock_name": row.get("f14") or "",
-                "plate_name": "",
-                "reason": "",
-                "combined_reason": "",
-                "related_plates": [],
-                "first_plate_name": "",
-                "change_rate": _to_float(row.get("f3")),
-                "turnover_ratio": _to_float(row.get("f148")),
-                "price": _to_float(row.get("f2")),
-                "hot_rank": rank_by_code.get(code),
-                "time": None,
-            })
+            result.append(
+                {
+                    "stock_code": code,
+                    "stock_name": row.get("f14") or "",
+                    "plate_name": "",
+                    "reason": "",
+                    "combined_reason": "",
+                    "related_plates": [],
+                    "first_plate_name": "",
+                    "change_rate": _to_float(row.get("f3")),
+                    "turnover_ratio": _to_float(row.get("f148")),
+                    "price": _to_float(row.get("f2")),
+                    "hot_rank": rank_by_code.get(code),
+                    "time": None,
+                }
+            )
         result.sort(key=lambda x: x.get("hot_rank") or 9999)
         return result
 
@@ -438,18 +466,24 @@ class KplClient:
         index: int = 0,
         size: int = 500,
     ) -> list[dict]:
-        """KPL 游资龙虎榜股票列表，含买入/卖出/做 T 席位标签。"""
-        data = self._base_params(
-            a="GetStockList",
-            c="LongHuBang",
-            st=str(size),
-            Index=str(index),
-            Type="2",
-            Time=trade_date or datetime.now().strftime("%Y-%m-%d"),
-            Token=self.token,
-            UserID=self.user_id,
-        )
+        """KPL 游资龙虎榜股票列表，含买入/卖出/做 T 席位标签。merge host (applhb)."""
+        data = {
+            "PhoneOSNew": "1",
+            "DeviceID": self.device_id,
+            "VerSion": self.version,
+            "apiv": "w38",
+            "a": "GetStockList",
+            "c": "LongHuBang",
+            "st": str(size),
+            "Index": str(index),
+            "Type": "2",
+            "Time": trade_date or datetime.now().strftime("%Y-%m-%d"),
+            "Token": self.token or "0",
+            "UserID": self.user_id or "0",
+        }
         raw = self._post(KPL_MERGE_HOST, data, "merge")
+        if _is_sentinel(raw):
+            return []
         rows = raw.get("list") or []
         buy_icons = raw.get("BIcon") or {}
         sell_icons = raw.get("SIcon") or {}
@@ -461,25 +495,50 @@ class KplClient:
             code = str(row.get("ID") or row.get("stock_code") or "")[:6]
             if not code:
                 continue
-            result.append({
-                "stock_code": code,
-                "stock_name": row.get("Name") or row.get("stock_name") or "",
-                "change_rate": _to_float(row.get("IncreaseAmount")),
-                "net_amount": _to_amount(row.get("BuyIn")),
-                "join_num": _to_float(row.get("JoinNum")),
-                "amount": _to_amount(row.get("Turnover")),
-                "float_mv": _to_amount(row.get("CircPrice")),
-                "turnover_ratio": _to_float(row.get("TurnoverRatio")),
-                "total_mv": _to_amount(row.get("Capitalization")),
-                "buy_seats": buy_icons.get(code, []) if isinstance(buy_icons, dict) else [],
-                "sell_seats": sell_icons.get(code, []) if isinstance(sell_icons, dict) else [],
-                "t_seats": t_icons.get(code, []) if isinstance(t_icons, dict) else [],
-                "concepts": list((concepts.get(code, {}) or {}).values()) if isinstance(concepts, dict) else [],
-            })
+            result.append(
+                {
+                    "stock_code": code,
+                    "stock_name": row.get("Name") or row.get("stock_name") or "",
+                    "change_rate": _to_float(row.get("IncreaseAmount")),
+                    "net_amount": _to_amount(row.get("BuyIn")),
+                    "join_num": _to_float(row.get("JoinNum")),
+                    "amount": _to_amount(row.get("Turnover")),
+                    "float_mv": _to_amount(row.get("CircPrice")),
+                    "turnover_ratio": _to_float(row.get("TurnoverRatio")),
+                    "total_mv": _to_amount(row.get("Capitalization")),
+                    "buy_seats": (
+                        buy_icons.get(code, []) if isinstance(buy_icons, dict) else []
+                    ),
+                    "sell_seats": (
+                        sell_icons.get(code, [])
+                        if isinstance(sell_icons, dict)
+                        else []
+                    ),
+                    "t_seats": (
+                        t_icons.get(code, []) if isinstance(t_icons, dict) else []
+                    ),
+                    "concepts": (
+                        list((concepts.get(code, {}) or {}).values())
+                        if isinstance(concepts, dict)
+                        else []
+                    ),
+                }
+            )
         return result
 
     def close(self):
-        self._client.close()
+        try:
+            self._client.close()
+        except Exception:
+            pass
+        try:
+            self._realtime.close()
+        except Exception:
+            pass
+        try:
+            self._history.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

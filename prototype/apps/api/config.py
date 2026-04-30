@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     kpl_user_id: str = ""
     kpl_token: str = ""
     kpl_device_id: str = ""
-    kpl_version: str = "10.1.1"
+    kpl_version: str = "5.17.0.0"
+    kpl_cookie: str = ""  # c1 共享 cookie；T03 之后由 cookie_provider 替代
     kpl_realtime_host: str = "https://apphwhq.longhuvip.com/w1/api/index.php"
     kpl_history_host: str = "https://apphis.longhuvip.com/w1/api/index.php"
     kpl_merge_host: str = "https://applhb.longhuvip.com/w1/api/index.php"
