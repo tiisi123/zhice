@@ -1,0 +1,126 @@
+# T05 (M001/S01) — 智策 CI 硬阻断流水线
+#
+# 触发：pull_request + push: main
+# 硬阻断 jobs（任一失败即阻断 merge）:
+#   - python_syntax  — prototype/scripts/check_python_syntax.py 全树语法扫
+#   - lint           — cd prototype/apps/web && npm run lint （T01 锁定 0 errors）
+#   - web_build      — cd prototype/apps/web && npm run build
+#   - api_contract   — py_compile 校验脚本可执行（S02 升级后接真起 api 跑契约）
+#   - no_mock        — python prototype/scripts/check_no_mock.py
+# 软警告 job（warn only）:
+#   - typecheck      — npm run typecheck （react-hooks v7 strict 误报暂不阻断）
+#
+# 业主排障：GitHub Actions runs 页面 → 点进 failed run → 看具体 job 日志。
+# 业主推 PR 必须等所有硬阻断 job 绿灯方可 merge（已在仓库 branch protection 里强制）。
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python_syntax:
+    name: Python 语法扫（全树）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run check_python_syntax.py
+        run: python prototype/scripts/check_python_syntax.py
+
+  lint:
+    name: Web Lint（硬阻断 0 errors）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: prototype/apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: prototype/apps/web/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: npm run lint
+        run: npm run lint
+
+  web_build:
+    name: Web Build（vite + tsc）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: prototype/apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: prototype/apps/web/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: npm run build
+        run: npm run build
+
+  typecheck:
+    name: Web Typecheck（warn only）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: prototype/apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: prototype/apps/web/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: npm run typecheck
+        run: npm run typecheck
+
+  api_contract:
+    name: API Contract（占位 / py_compile）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 校验 check_api_contract.py 语法
+        # S02 升级路由响应三字段后再起 api 跑真契约。
+        # 本 slice 只确认脚本本身可执行（防 import 断裂）。
+        run: python -m py_compile prototype/scripts/check_api_contract.py
+
+  no_mock:
+    name: No Mock（生产代码不得含 mock）
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run check_no_mock.py
+        run: python prototype/scripts/check_no_mock.py

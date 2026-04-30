@@ -1,0 +1,87 @@
+# T05 (M001/S01) — 智策 staging 自动部署流水线
+#
+# 触发：
+#   - push: main         （vars.DEPLOY_ENABLED == 'true' 时实跑；未注入 secrets 时业主先把它设 false）
+#   - workflow_dispatch  （业主手动触发，永远跑）
+#
+# 步骤：SSH 到 staging 主机 → cd /opt/zhice → git pull → cd deploy → docker compose up -d --build → curl health
+#
+# 业主必备的 GHA Secrets（Settings → Secrets and variables → Actions → New repository secret）:
+#   STAGING_HOST     staging 主机 IP 或域名（如 staging.zhice.example.com 或 1.2.3.4）
+#   STAGING_USER     SSH 登录用户（推荐 deploy/zhice 专用账号，避免 root）
+#   STAGING_SSH_KEY  私钥全文（PEM 格式，含 -----BEGIN ... END ----- 头尾）
+#   STAGING_PORT     SSH 端口（可选，默认 22）
+#
+# 业主必备的 GHA Variables（Settings → Secrets and variables → Actions → Variables）:
+#   DEPLOY_ENABLED   "true" 时 push main 自动部署；首次配齐前请保持 "false"，仅手动触发
+#
+# secrets 缺失或 ssh 失败时，job 会自动 fail（不会带病部署）。
+# 业主排障入口：Actions 页面 → deploy-staging run → 看 failed step 的红 ✗ 日志；
+# 失败时若需 docker compose logs，业主可 ssh 到主机跑 `make deploy-logs-api`。
+
+name: deploy-staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: SSH 到 staging → docker compose up
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 仅在 workflow_dispatch（手动）或 push:main 且 DEPLOY_ENABLED=true 时跑。
+    # 业主在 secrets 配齐前把 vars.DEPLOY_ENABLED 设为 "false"，push main 不会触发实跑，
+    # 仍可在 Actions 页面用 "Run workflow" 手动测试。
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'push' && vars.DEPLOY_ENABLED == 'true')
+    steps:
+      - name: Checkout（仅供日志可读 commit sha）
+        uses: actions/checkout@v4
+
+      - name: SSH → cd /opt/zhice → git pull → docker compose up -d --build
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_PORT || 22 }}
+          # 首次连接接受 host fingerprint，避免人工 known_hosts 维护。
+          # 主机更换后业主需主动清理 known_hosts（DEPLOY.md 章节 7 故障排障说明）。
+          command_timeout: 25m
+          script_stop: true
+          script: |
+            set -e
+            cd /opt/zhice
+            git fetch --all --prune
+            git checkout main
+            git reset --hard origin/main
+            cd deploy
+            # docker compose pull 拉最新基础镜像（mysql:8.0 / caddy / nginx / node / python）
+            docker compose pull --ignore-pull-failures || true
+            # 业务镜像 (zhice-api / zhice-web) 用 build —— pull 取不到。
+            docker compose up -d --build --remove-orphans
+            # 等 healthcheck 收敛（zhice-db 30s + zhice-api alembic 上限约 30s + zhice-web nginx 即起）
+            sleep 60
+            docker compose ps
+            # 端到端健康验证：Caddy:80 → zhice-web:80 → zhice-api:8000 /api/health
+            curl -fsS http://localhost/api/health
+            echo ">> staging deploy OK on $(date -u +%FT%TZ)"
+
+      - name: 失败时给业主一条排障提示
+        if: failure()
+        run: |
+          echo "::error::staging 部署失败。业主排障："
+          echo "1. ssh 到 staging 主机：cd /opt/zhice && make deploy-logs-api （tail zhice-api 日志）"
+          echo "2. make deploy-ps 看哪个服务 unhealthy"
+          echo "3. /var/log/zhice/api.log 看应用层错误"
+          echo "4. 必要时 make deploy-down && make deploy-up 重启"
