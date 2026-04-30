@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, date
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -94,3 +94,15 @@ class ConnectorResponse(BaseModel):
     pulled_at: datetime = Field(default_factory=datetime.now)
     data: list[dict] = Field(default_factory=list)
     raw: Optional[dict] = None
+
+
+# M001/S02 D004 数据契约 SSOT —— 28 路由响应统一 enum + meta 模型
+# 参见 .gsd/DECISIONS.md::D004，前端 apps/web/src/api/types.ts 同名导出保持对齐
+DataStatus = Literal["real", "mock", "fallback", "unavailable", "empty", "error"]
+
+
+class ApiMeta(BaseModel):
+    data_status: DataStatus
+    source: str
+    mock: bool = False
+    message: str = ""

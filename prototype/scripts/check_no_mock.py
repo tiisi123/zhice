@@ -24,6 +24,12 @@ PATTERNS = [
 
 ALLOWLIST = {
     "apps/web/src/components/MockBanner.tsx",
+    # M001/S02 D005 EXEMPT 白名单：DataStatusBadge 的 MOCK_COLOR/MOCK_LABEL 是渲染常量
+    # 命名（演示数据徽标），不是运行时 mock 逻辑。
+    "apps/web/src/components/DataStatusBadge.tsx",
+    # M001/S02 D004 数据契约 helper 的 docstring/error message 引用 "mock=True ⟺ data_status='mock'"
+    # 是契约约束的描述文本（防御性 ValueError 抛出），不是默认开启 mock 路径。
+    "apps/api/utils/contract.py",
 }
 
 

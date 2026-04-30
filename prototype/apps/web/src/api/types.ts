@@ -159,3 +159,15 @@ export interface PortfolioData {
   total_pnl_rate: number
   stocks: PortfolioStock[]
 }
+
+// M001/S02 D004 数据契约 SSOT —— 与后端 packages/shared/types.py::DataStatus / ApiMeta 一一对应
+// 参见 .gsd/DECISIONS.md::D004。S02 起所有数据卡片的 meta 走这两个类型。
+export type DataStatus = 'real' | 'mock' | 'fallback' | 'unavailable' | 'empty' | 'error'
+
+export interface ApiMeta {
+  data_status: DataStatus
+  source: string
+  mock: boolean
+  message?: string
+  name?: string
+}
