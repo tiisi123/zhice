@@ -29,6 +29,8 @@ const ResearchPoolPage = lazy(() => import('./pages/ResearchPoolPage'))
 const StrategyWorkshopPage = lazy(() => import('./pages/StrategyWorkshopPage'))
 const MyWorkspacePage = lazy(() => import('./pages/MyWorkspacePage'))
 const MembershipPage = lazy(() => import('./pages/MembershipPage'))
+// M001/S01/T06: dev-only demo of DataStatusBadge; S02 will消费同一组件
+const DemoBadgePage = lazy(() => import('./pages/DemoBadgePage'))
 
 function NotFound() {
   return (
@@ -53,6 +55,11 @@ function App() {
       <Suspense fallback={PageFallback}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* M001/S01/T06: DataStatusBadge 4 态手测页（dev only，AuthGuard 之外）；
+            S02 将由所有数据卡片统一消费 components/DataStatusBadge */}
+        {import.meta.env.DEV && (
+          <Route path="/dev/data-status-badge" element={<DemoBadgePage />} />
+        )}
         <Route element={<AuthGuard><AppLayout /></AuthGuard>}>
           <Route path="/" element={<Navigate to="/replay" replace />} />
           <Route path="/intraday" element={<IntradayPage />} />
