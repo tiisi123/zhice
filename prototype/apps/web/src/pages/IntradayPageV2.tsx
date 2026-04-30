@@ -10,7 +10,7 @@ import * as echarts from 'echarts'
 import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { useMarketWS } from '../api/useMarketWS'
-import type { LimitUpStock } from '../api/types'
+import type { LimitUpStock, AnyData } from '../api/types'
 import {
   AskAIChip, SectionHeader,
 } from '../components/smart'
@@ -74,22 +74,23 @@ function sectorChange(s?: SectorRaw) {
   return safeNum(s?.change_rate ?? s?.ChangePercent ?? s?.concept_increase ?? s?.col4)
 }
 
-function normalizeStock<T extends Record<string, any>>(item: T): T {
-  const stock_code = item.stock_code ?? item.SecurityCode
-  const stock_name = item.stock_name ?? item.SecurityName
+function normalizeStock<T>(item: T): T {
+  const it = item as AnyData
+  const stock_code = it.stock_code ?? it.SecurityCode
+  const stock_name = it.stock_name ?? it.SecurityName
   return {
-    ...item,
+    ...it,
     stock_code,
     stock_name,
-    first_plate_name: item.first_plate_name ?? item.PlateName ?? item.plate_name ?? item.concept_name,
-    change_rate: safeNum(item.change_rate ?? item.ChangePercent, item.change_rate),
-    turnover_ratio: safeNum(item.turnover_ratio, item.turnover_ratio),
-    board_count: safeNum(item.board_count, item.board_count),
-    reason: item.reason ?? item.combined_reason ?? '',
-  }
+    first_plate_name: it.first_plate_name ?? it.PlateName ?? it.plate_name ?? it.concept_name,
+    change_rate: safeNum(it.change_rate ?? it.ChangePercent, it.change_rate),
+    turnover_ratio: safeNum(it.turnover_ratio, it.turnover_ratio),
+    board_count: safeNum(it.board_count, it.board_count),
+    reason: it.reason ?? it.combined_reason ?? '',
+  } as T
 }
 
-function metaOf(name: string, resp: any): ApiMeta {
+function metaOf(name: string, resp: AnyData): ApiMeta {
   return {
     name,
     source: resp?.source,
@@ -116,7 +117,8 @@ function MetaStrip({ items }: { items: ApiMeta[] }) {
 function toMinutes(t: string | null | undefined): number | null {
   if (!t) return null
   const s = String(t).trim()
-  let h = 0, m = 0
+  let h: number
+  let m: number
   if (s.includes(':')) {
     const ps = s.split(':')
     h = parseInt(ps[0]) || 0
@@ -454,9 +456,9 @@ function SectionRisk({ broken, limitUp }: { broken: LimitUpStock[]; limitUp: Lim
 
 // ========== Section C · 异动流（保留表格，加 AI 追问） ==========
 function AnomalyFlows({ limitUp, broken, hot, anomaly }: {
-  limitUp: LimitUpStock[]; broken: LimitUpStock[]; hot: any[]; anomaly: any[]
+  limitUp: LimitUpStock[]; broken: LimitUpStock[]; hot: AnyData[]; anomaly: AnyData[]
 }) {
-  const luCols: any[] = [
+  const luCols: AnyData[] = [
     { title: '代码', dataIndex: 'stock_code', width: 76, render: safeText },
     { title: '名称', dataIndex: 'stock_name', width: 80,
       render: (v: string, r: LimitUpStock) => <Link to={`/stock/${r.stock_code}`}>{safeText(v)}</Link> },
@@ -465,7 +467,7 @@ function AnomalyFlows({ limitUp, broken, hot, anomaly }: {
     { title: '题材', dataIndex: 'first_plate_name', ellipsis: true, render: safeText },
     { title: '封板', dataIndex: 'time', width: 76, render: safeText },
   ]
-  const brCols: any[] = [
+  const brCols: AnyData[] = [
     { title: '代码', dataIndex: 'stock_code', width: 76, render: safeText },
     { title: '名称', dataIndex: 'stock_name', width: 80,
       render: (v: string, r: LimitUpStock) => <Link to={`/stock/${r.stock_code}`}>{safeText(v)}</Link> },
@@ -474,7 +476,7 @@ function AnomalyFlows({ limitUp, broken, hot, anomaly }: {
     { title: '题材', dataIndex: 'first_plate_name', ellipsis: true, render: safeText },
     { title: '炸板', dataIndex: 'time', width: 76, render: safeText },
   ]
-  const hotCols: any[] = [
+  const hotCols: AnyData[] = [
     { title: '代码', dataIndex: 'stock_code', width: 76, render: safeText },
     { title: '名称', dataIndex: 'stock_name', width: 80, render: safeText },
     { title: '涨幅', dataIndex: 'change_rate', width: 70,
@@ -485,10 +487,10 @@ function AnomalyFlows({ limitUp, broken, hot, anomaly }: {
     { title: '题材', dataIndex: 'first_plate_name', ellipsis: true, render: safeText },
     { title: '时间', dataIndex: 'time', width: 76, render: safeText },
   ]
-  const anomCols: any[] = [
+  const anomCols: AnyData[] = [
     { title: '代码', dataIndex: 'stock_code', width: 76, render: safeText },
     { title: '名称', dataIndex: 'stock_name', width: 80, render: safeText },
-    { title: '状态', width: 70, render: (_: any, r: any) => {
+    { title: '状态', width: 70, render: (_: AnyData, r: AnyData) => {
       const s = safeText(r.data_status || r.status, '')
       const c: Record<string, string> = { '涨停': 'red', '炸板': 'orange', '跌停': 'green' }
       return <Tag color={c[s] || 'default'}>{s || '—'}</Tag>
@@ -520,8 +522,8 @@ function AnomalyFlows({ limitUp, broken, hot, anomaly }: {
 export default function IntradayPageV2() {
   const [limitUp, setLimitUp] = useState<LimitUpStock[]>([])
   const [broken, setBroken] = useState<LimitUpStock[]>([])
-  const [hot, setHot] = useState<any[]>([])
-  const [anomaly, setAnomaly] = useState<any[]>([])
+  const [hot, setHot] = useState<AnyData[]>([])
+  const [anomaly, setAnomaly] = useState<AnyData[]>([])
   const [sectors, setSectors] = useState<SectorRaw[]>([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -541,35 +543,35 @@ export default function IntradayPageV2() {
     const load = async () => {
       setLoading(true)
       const safe = async <T,>(p: Promise<T>) => {
-        try { return await p } catch (e: any) { return { __err: e?.message || '请求失败' } as any }
+        try { return await p } catch (e) { return { __err: (e as Error)?.message || '请求失败' } as AnyData }
       }
       const [lu, br, hs, an, sec] = await Promise.all([
         safe(fetchApi<ListResp<LimitUpStock>>('/market/limit-up')),
         safe(fetchApi<ListResp<LimitUpStock>>('/market/broken')),
-        safe(fetchApi<ListResp<any>>('/market/hot-stocks')),
-        safe(fetchApi<ListResp<any>>('/market/anomaly')),
+        safe(fetchApi<ListResp<AnyData>>('/market/hot-stocks')),
+        safe(fetchApi<ListResp<AnyData>>('/market/anomaly')),
         safe(fetchApi<ListResp<SectorRaw>>('/market/sectors')),
       ])
-      const errs = [lu, br, hs, an].filter((x: any) => x?.__err)
-      if (errs.length === 4) setErrMsg(`后端不可达：${(errs[0] as any).__err}`)
+      const errs = [lu, br, hs, an].filter((x: AnyData) => x?.__err)
+      if (errs.length === 4) setErrMsg(`后端不可达：${(errs[0] as AnyData).__err}`)
       else setErrMsg('')
-      setLimitUp(((lu as any).data || []).map(normalizeStock))
-      setBroken(((br as any).data || []).map(normalizeStock))
-      setHot(((hs as any).data || []).map(normalizeStock))
-      setAnomaly(((an as any).data || []).map(normalizeStock))
-      setSectors((sec as any).data || [])
+      setLimitUp(((lu as AnyData).data || []).map(normalizeStock))
+      setBroken(((br as AnyData).data || []).map(normalizeStock))
+      setHot(((hs as AnyData).data || []).map(normalizeStock))
+      setAnomaly(((an as AnyData).data || []).map(normalizeStock))
+      setSectors((sec as AnyData).data || [])
       const nextMeta = [
         metaOf('涨停池', lu),
         metaOf('炸板池', br),
         metaOf('热股', hs),
         metaOf('异动', an),
         metaOf('题材', sec),
-      ].filter((m) => !((m as any).__err))
+      ].filter((m) => !((m as AnyData).__err))
       setMeta(nextMeta)
       setIsMock(nextMeta.some((m) => m.mock))
       setLoading(false)
     }
-    load()
+    void load()
   }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />

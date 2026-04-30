@@ -4,7 +4,7 @@ import { ArrowUpOutlined, ArrowDownOutlined, CaretUpFilled, CaretDownFilled } fr
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 import { fetchApi } from '../api/client'
-import type { MarketSummary, LadderData, LimitUpStock, RelayData } from '../api/types'
+import type { MarketSummary, LadderData, LimitUpStock, RelayData, AnyData } from '../api/types'
 
 const sentimentColor: Record<string, string> = {
   '冰点': '#1890ff',
@@ -176,18 +176,18 @@ function RelayCard({ data, error }: { data: RelayData | null; error: boolean }) 
   )
 }
 
-function SectorRanking({ data, error }: { data: any[] | null; error: boolean }) {
+function SectorRanking({ data, error }: { data: AnyData[] | null; error: boolean }) {
   if (error) return <Empty description={'板块排行加载失败'} />
   if (!data) return <Spin />
   const cols = [
     { title: '板块', key: 'name', width: 120, ellipsis: true,
-      render: (_: any, row: any) => row.PlateName || row.concept_name || row.col2 || row[1] || '—',
+      render: (_: AnyData, row: AnyData) => row.PlateName || row.concept_name || row.col2 || row[1] || '—',
     },
     { title: '强度', key: 'intensity', width: 60,
-      render: (_: any, row: any) => row.Intensity || row.concept_intensity || row.col3 || row[2] || '—',
+      render: (_: AnyData, row: AnyData) => row.Intensity || row.concept_intensity || row.col3 || row[2] || '—',
     },
     { title: '涨幅', key: 'change', width: 70,
-      render: (_: any, row: any) => {
+      render: (_: AnyData, row: AnyData) => {
         const n = parseFloat(row.ChangePercent || row.concept_increase || row.col4 || row[3]) || 0
         return <span style={{ color: n >= 0 ? '#f5222d' : '#52c41a' }}>{n.toFixed(2)}%</span>
       },
@@ -215,7 +215,7 @@ function CapitalFlowChart({ data, error }: { data: CapitalItem[] | null; error: 
     chart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
+        formatter: (params: AnyData) => {
           const p = params[0]
           const item = top15[p.dataIndex]
           const netStr = Math.abs(item.net_flow) >= 1e8
@@ -231,7 +231,7 @@ function CapitalFlowChart({ data, error }: { data: CapitalItem[] | null; error: 
         type: 'bar',
         data: top15.map(d => d.net_flow).reverse(),
         itemStyle: {
-          color: (params: any) => params.value >= 0 ? '#f5222d' : '#52c41a',
+          color: (params: AnyData) => params.value >= 0 ? '#f5222d' : '#52c41a',
         },
       }],
     })
@@ -260,7 +260,7 @@ function RotationScatter({ data, error }: { data: RotationPoint[] | null; error:
     const chart = echarts.init(chartRef.current)
     chart.setOption({
       tooltip: {
-        formatter: (params: any) => {
+        formatter: (params: AnyData) => {
           const d = params.data
           return `${d[3]}<br/>涨幅: ${d[0].toFixed(2)}%<br/>强度: ${d[1]}<br/>净额: ${(d[2] / 1e8).toFixed(2)}亿`
         },
@@ -283,13 +283,13 @@ function RotationScatter({ data, error }: { data: RotationPoint[] | null; error:
         symbolSize: (val: number[]) => Math.min(Math.max(Math.abs(val[2]) / 1e7, 6), 30),
         data: data.map(d => [d.change, d.intensity, d.net_flow, d.name]),
         itemStyle: {
-          color: (params: any) => params.data[0] >= 0 ? '#f5222d' : '#52c41a',
+          color: (params: AnyData) => params.data[0] >= 0 ? '#f5222d' : '#52c41a',
           opacity: 0.7,
         },
         label: {
           show: true,
           position: 'right',
-          formatter: (params: any) => params.data[3],
+          formatter: (params: AnyData) => params.data[3],
           fontSize: 10,
           color: '#666',
         },
@@ -310,7 +310,7 @@ export default function ReplayPage() {
   const [summary, setSummary] = useState<MarketSummary | null>(null)
   const [ladder, setLadder] = useState<LadderData | null>(null)
   const [relay, setRelay] = useState<RelayData | null>(null)
-  const [sectors, setSectors] = useState<any[] | null>(null)
+  const [sectors, setSectors] = useState<AnyData[] | null>(null)
   const [capitalFlow, setCapitalFlow] = useState<CapitalItem[] | null>(null)
   const [rotation, setRotation] = useState<RotationPoint[] | null>(null)
   const [loading, setLoading] = useState(true)
@@ -322,11 +322,11 @@ export default function ReplayPage() {
     setErrors({ summary: false, ladder: false, relay: false, sectors: false, capital: false, rotation: false })
 
     const q = `?date=${date}`
-    Promise.allSettled([
+    void Promise.allSettled([
       fetchApi<MarketSummary>(`/market/summary${q}`),
       fetchApi<LadderData>(`/market/ladder${q}`),
       fetchApi<RelayData>(`/market/ladder-relay${q}`),
-      fetchApi<{ data: any[] }>(`/market/sectors${q}`),
+      fetchApi<{ data: AnyData[] }>(`/market/sectors${q}`),
       fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow${q}`),
       fetchApi<{ data: RotationPoint[] }>(`/market/rotation${q}`),
     ]).then(([s, l, r, sec, cf, rot]) => {

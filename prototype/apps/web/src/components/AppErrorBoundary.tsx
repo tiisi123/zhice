@@ -12,7 +12,7 @@ class AppErrorBoundary extends React.Component<React.PropsWithChildren, State> {
   static getDerivedStateFromError(error: Error): State {
     return {
       hasError: true,
-      message: error?.message || '未知错误',
+      message: (error as Error)?.message || '未知错误',
     }
   }
 

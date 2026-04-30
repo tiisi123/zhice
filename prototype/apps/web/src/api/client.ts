@@ -40,7 +40,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function fetchApi<T = any>(path: string, params?: Record<string, string>): Promise<T> {
+export async function fetchApi<T = unknown>(path: string, params?: Record<string, string>): Promise<T> {
   let url = `${API_BASE}${path}`
   if (params) {
     const sp = new URLSearchParams(params)
@@ -50,7 +50,7 @@ export async function fetchApi<T = any>(path: string, params?: Record<string, st
   return handle<T>(res)
 }
 
-export async function postApi<T = any>(path: string, body?: unknown): Promise<T> {
+export async function postApi<T = unknown>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
@@ -59,7 +59,7 @@ export async function postApi<T = any>(path: string, body?: unknown): Promise<T>
   return handle<T>(res)
 }
 
-export async function deleteApi<T = any>(path: string): Promise<T> {
+export async function deleteApi<T = unknown>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'DELETE',
     headers: { ...authHeaders() },
@@ -67,7 +67,7 @@ export async function deleteApi<T = any>(path: string): Promise<T> {
   return handle<T>(res)
 }
 
-export async function patchApi<T = any>(path: string, body?: unknown): Promise<T> {
+export async function patchApi<T = unknown>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...authHeaders() },

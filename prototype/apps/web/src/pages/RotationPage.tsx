@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, Tabs, Select, Button, Table, Typography, Input, Space, Tag, Form, InputNumber, message, Alert } from 'antd'
 import { fetchApi, postApi } from '../api/client'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
 const { TextArea } = Input
@@ -35,7 +36,7 @@ function SimulateTab() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetchApi<{ themes: string[] }>('/rotation/known-themes').then((r) => setThemes(r.themes))
+    void fetchApi<{ themes: string[] }>('/rotation/known-themes').then((r) => setThemes(r.themes))
   }, [])
 
   const run = async () => {
@@ -107,7 +108,7 @@ function NoveltyTab() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   return (
     <Card>
@@ -144,7 +145,7 @@ function GapTab() {
 
   const run = async () => {
     if (!news.trim()) { message.warning('请输入消息/事件'); return }
-    const r = await postApi('/rotation/expectation-gap', { news, change_rate: changeRate, vol_ratio: volRatio })
+    const r = await postApi<{ impact: number; reaction: number; gap: number; label: string }>('/rotation/expectation-gap', { news, change_rate: changeRate, vol_ratio: volRatio })
     setResult(r)
   }
 
@@ -191,7 +192,7 @@ function ThemeHistoryTab() {
     if (!theme.trim()) return
     setLoading(true)
     try {
-      const r = await fetchApi<{ trajectory: any[] }>(`/rotation/theme-history/${encodeURIComponent(theme)}`, { days: '90' })
+      const r = await fetchApi<{ trajectory: AnyData[] }>(`/rotation/theme-history/${encodeURIComponent(theme)}`, { days: '90' })
       setData(r.trajectory || [])
     } finally { setLoading(false) }
   }

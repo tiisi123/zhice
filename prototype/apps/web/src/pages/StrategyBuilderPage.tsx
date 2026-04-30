@@ -5,6 +5,7 @@ import {
 import { PlusOutlined, DeleteOutlined, ExperimentOutlined, CopyOutlined } from '@ant-design/icons'
 import { postApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
 const { TextArea } = Input
@@ -77,7 +78,7 @@ function buildDSL(
   sel: Condition[], entry: Condition[], exit: Condition[], pos: Condition[], env: Condition[],
 ) {
   const toObj = (conds: Condition[]) => {
-    const obj: Record<string, any> = {}
+    const obj: Record<string, unknown> = {}
     for (const c of conds) {
       const val = c.value === '' ? '' : isNaN(Number(c.value)) ? c.value : Number(c.value)
       if (c.op === 'eq') {
@@ -135,13 +136,13 @@ export default function StrategyBuilderPage() {
       const r = await postApi<{ dsl: string }>('/ai/strategy-dsl', { text: nlText })
       // AI 返回的 DSL 文本可以直接作为引用
       message.success('AI 生成完毕，已放入右侧预览')
-      ;(navigator as any).__zhice_ai_dsl = r.dsl
+      ;(navigator as AnyData).__zhice_ai_dsl = r.dsl
       try {
         const parsed = JSON.parse(r.dsl.trim().replace(/^```json|```$/g, '').trim())
         if (parsed.name) setName(parsed.name)
       } catch { /* ignore */ }
-    } catch (e: any) {
-      message.error(e.message || '生成失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '生成失败')
     } finally {
       setGenerating(false)
     }

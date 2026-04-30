@@ -48,7 +48,7 @@ export default function WatchlistPage() {
       .catch(() => setHistory([]))
   }
   useEffect(() => { load() }, [filterGroup])  // eslint-disable-line
-  useEffect(() => { checkAlerts(); loadHistory() }, [items.length])  // eslint-disable-line
+  useEffect(() => { checkAlerts(); loadHistory() }, [items.length])   
 
   const openAdd = () => { setEditing(null); form.resetFields(); setShowModal(true) }
   const openEdit = (it: WatchItem) => {
@@ -72,8 +72,8 @@ export default function WatchlistPage() {
       }
       setShowModal(false)
       load()
-    } catch (e: any) {
-      message.error(e?.message || '保存失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '保存失败')
     }
   }
   const remove = async (id: number) => {

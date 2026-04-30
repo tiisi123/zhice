@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Card, Col, Row, Table, Statistic, Button, Select, Input, message, Popconfirm } from 'antd'
 import { postApi, deleteApi, fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import type { AnyData } from '../api/types'
 
 export default function AdvancedStrategyPage() {
-  const [optResult, setOptResult] = useState<any>(null)
-  const [simStatus, setSimStatus] = useState<any>(null)
+  const [optResult, setOptResult] = useState<AnyData>(null)
+  const [simStatus, setSimStatus] = useState<AnyData>(null)
   const [simId, setSimId] = useState('')
   const [loading, setLoading] = useState(false)
   const [template, setTemplate] = useState('涨停次日高开')
@@ -19,46 +20,46 @@ export default function AdvancedStrategyPage() {
   const runOptimize = async () => {
     setLoading(true)
     try {
-      const data = await postApi<any>(`/advanced-strategy/optimize?template_name=${encodeURIComponent(template)}&years=3`)
+      const data = await postApi<AnyData>(`/advanced-strategy/optimize?template_name=${encodeURIComponent(template)}&years=3`)
       setOptResult(data)
       if (data.data_status === 'unavailable') message.warning(data.message || '真实历史行情不可用')
-    } catch (e: any) {
-      message.error(e.message || '参数优化失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '参数优化失败')
     }
     setLoading(false)
   }
 
   const createSim = async () => {
     try {
-      const data = await postApi<any>('/advanced-strategy/sim/create?capital=1000000')
+      const data = await postApi<AnyData>('/advanced-strategy/sim/create?capital=1000000')
       setSimId(data.session_id)
       setSimStatus(data.status)
       message.success(`模拟账户创建成功: ${data.session_id}`)
-    } catch (e: any) {
-      message.error(e.message || '创建模拟账户失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '创建模拟账户失败')
     }
   }
 
   const simNextDay = async () => {
     if (!simId) return
     try {
-      const data = await postApi<any>(`/advanced-strategy/sim/${simId}/next-day`)
+      const data = await postApi<AnyData>(`/advanced-strategy/sim/${simId}/next-day`)
       setSimStatus(data.status)
-    } catch (e: any) {
-      message.error(e.message || '推进失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '推进失败')
     }
   }
 
   const simBuy = async () => {
     if (!simId) return
     try {
-      const data = await postApi<any>(
+      const data = await postApi<AnyData>(
         `/advanced-strategy/sim/${simId}/buy?code=${buyCode}&name=${encodeURIComponent(buyName)}&price=${buyPrice}&amount=${buyAmount}`
       )
       setSimStatus(data.status)
       message.success('买入成功')
-    } catch (e: any) {
-      message.error(e.message || '买入失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '买入失败')
     }
   }
 
@@ -68,13 +69,13 @@ export default function AdvancedStrategyPage() {
       return
     }
     try {
-      const data = await postApi<any>(
+      const data = await postApi<AnyData>(
         `/advanced-strategy/sim/${simId}/sell?code=${sellCode}&price=${sellPrice}`
       )
       setSimStatus(data.status)
       message.success(`卖出成功，盈亏: ${data.trade?.pnl || 0}`)
-    } catch (e: any) {
-      message.error(e.message || '卖出失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '卖出失败')
     }
   }
 
@@ -85,18 +86,18 @@ export default function AdvancedStrategyPage() {
       setSimId('')
       setSimStatus(null)
       message.success('模拟账户已删除')
-    } catch (e: any) {
-      message.error(e.message || '删除失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '删除失败')
     }
   }
 
   const refreshStatus = async () => {
     if (!simId) return
     try {
-      const data = await fetchApi<any>(`/advanced-strategy/sim/${simId}/status`)
+      const data = await fetchApi<AnyData>(`/advanced-strategy/sim/${simId}/status`)
       setSimStatus(data.status)
-    } catch (e: any) {
-      message.error(e.message || '刷新失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '刷新失败')
     }
   }
 

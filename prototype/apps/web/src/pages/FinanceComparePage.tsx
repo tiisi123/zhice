@@ -64,8 +64,8 @@ export default function FinanceComparePage() {
     try {
       const r = await postApi<CompareResp>('/finance/compare', { codes })
       setData(r)
-    } catch (e: any) {
-      message.error(e?.message || '对比失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '对比失败')
     } finally {
       setLoading(false)
     }

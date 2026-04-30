@@ -9,6 +9,7 @@ import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
 import { AskAIChip } from '../components/smart'
+import type { AnyData } from '../api/types'
 
 const DIR_ICON: Record<string, React.ReactNode> = {
   up: <ArrowUpOutlined style={{ color: '#f5222d' }} />,
@@ -28,21 +29,21 @@ const DEFAULT_GROWTH_STOCKS = [
 ]
 
 export default function GrowthValueOverviewPage() {
-  const [macro, setMacro] = useState<any[]>([])
-  const [industries, setIndustries] = useState<any[]>([])
-  const [dataStatus, setDataStatus] = useState<any[]>([])
+  const [macro, setMacro] = useState<AnyData[]>([])
+  const [industries, setIndustries] = useState<AnyData[]>([])
+  const [dataStatus, setDataStatus] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      fetchApi<{ indicators: any[] }>('/growth/macro').catch(() => ({ indicators: [] })),
-      fetchApi<{ industries: any[] }>('/growth/prosperity').catch(() => ({ industries: [] })),
+    void Promise.all([
+      fetchApi<{ indicators: AnyData[] }>('/growth/macro').catch(() => ({ indicators: [] })),
+      fetchApi<{ industries: AnyData[] }>('/growth/prosperity').catch(() => ({ industries: [] })),
     ]).then(([m, p]) => {
       setMacro(m.indicators || [])
       setIndustries(p.industries || [])
       setDataStatus([
-        { label: '宏观', source: (m as any).source, data_status: (m as any).data_status, mock: (m as any).mock, message: (m as any).message },
-        { label: '景气', source: (p as any).source, data_status: (p as any).data_status, mock: (p as any).mock, message: (p as any).message },
+        { label: '宏观', source: (m as AnyData).source, data_status: (m as AnyData).data_status, mock: (m as AnyData).mock, message: (m as AnyData).message },
+        { label: '景气', source: (p as AnyData).source, data_status: (p as AnyData).data_status, mock: (p as AnyData).mock, message: (p as AnyData).message },
       ])
     }).finally(() => setLoading(false))
   }, [])

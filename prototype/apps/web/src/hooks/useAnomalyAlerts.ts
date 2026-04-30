@@ -72,7 +72,7 @@ export function useAnomalyAlerts(intervalMs = 30_000) {
 
     // 启动延迟 5s，避免与登录/初始化抢资源
     const startup = window.setTimeout(() => {
-      tick()
+      void tick()
       timer = window.setInterval(tick, intervalMs)
     }, 5_000)
 

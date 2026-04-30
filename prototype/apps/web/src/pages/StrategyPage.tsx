@@ -6,6 +6,7 @@ import * as echarts from 'echarts'
 import { fetchApi, postApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import Disclaimer from '../components/Disclaimer'
+import type { AnyData } from '../api/types'
 
 const { TextArea } = Input
 
@@ -24,14 +25,14 @@ const tradeCols = [
 ]
 
 export default function StrategyPage() {
-  const [templates, setTemplates] = useState<Record<string, any>>({})
+  const [templates, setTemplates] = useState<Record<string, AnyData>>({})
   const [selectedTemplate, setSelectedTemplate] = useState('')
   const [nlInput, setNlInput] = useState('')
   const [dslResult, setDslResult] = useState<string | null>(null)
-  const [backtestResult, setBtResult] = useState<any>(null)
+  const [backtestResult, setBtResult] = useState<AnyData>(null)
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [compareList, setCompareList] = useState<any[]>([])
+  const [compareList, setCompareList] = useState<AnyData[]>([])
   const [comparingKey, setComparingKey] = useState<string | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
 
@@ -42,17 +43,17 @@ export default function StrategyPage() {
     }
     setComparingKey(name)
     try {
-      const data = await postApi<any>(`/strategy/run-template?template_name=${encodeURIComponent(name)}&years=3`)
+      const data = await postApi<AnyData>(`/strategy/run-template?template_name=${encodeURIComponent(name)}&years=3`)
       if (data.result) setCompareList((prev) => [...prev, data.result])
       else message.warning(data.message || '真实历史行情不可用')
-    } catch (e: any) {
-      message.error(e.message || '回测失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '回测失败')
     }
     setComparingKey(null)
   }
 
   useEffect(() => {
-    fetchApi<{ templates: Record<string, any> }>('/strategy/templates')
+    fetchApi<{ templates: Record<string, unknown> }>('/strategy/templates')
       .then(res => setTemplates(res.templates))
       .catch(console.error)
   }, [])
@@ -62,13 +63,13 @@ export default function StrategyPage() {
     const chart = echarts.init(chartRef.current)
     const curve = backtestResult.equity_curve
     chart.setOption({
-      tooltip: { trigger: 'axis', formatter: (p: any) => `${p[0].axisValue}<br/>净值: ${p[0].value}` },
+      tooltip: { trigger: 'axis', formatter: (p: AnyData) => `${p[0].axisValue}<br/>净值: ${p[0].value}` },
       grid: { left: 50, right: 20, top: 20, bottom: 30 },
-      xAxis: { type: 'category', data: curve.map((c: any) => c.date.slice(5)), axisLabel: { fontSize: 10 } },
+      xAxis: { type: 'category', data: curve.map((c: AnyData) => c.date.slice(5)), axisLabel: { fontSize: 10 } },
       yAxis: { type: 'value', name: '净值', axisLabel: { fontSize: 10 } },
       series: [{
         type: 'line',
-        data: curve.map((c: any) => c.value),
+        data: curve.map((c: AnyData) => c.value),
         smooth: true,
         lineStyle: { width: 2 },
         areaStyle: { opacity: 0.15 },
@@ -84,7 +85,7 @@ export default function StrategyPage() {
     if (!selectedTemplate) return
     setLoading(true)
     try {
-      const data = await postApi<any>(
+      const data = await postApi<AnyData>(
         `/strategy/run-template?template_name=${encodeURIComponent(selectedTemplate)}&years=3`
       )
       if (!data.result) {
@@ -95,8 +96,8 @@ export default function StrategyPage() {
       }
       setBtResult(data.result)
       setAnalysis(data.analysis)
-    } catch (e: any) {
-      message.error(e.message || '回测失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '回测失败')
     }
     setLoading(false)
   }
@@ -105,10 +106,10 @@ export default function StrategyPage() {
     if (!nlInput.trim()) return
     setLoading(true)
     try {
-      const data = await postApi<any>('/ai/strategy-dsl', { text: nlInput })
+      const data = await postApi<AnyData>('/ai/strategy-dsl', { text: nlInput })
       setDslResult(data.dsl)
-    } catch (e: any) {
-      message.error(e.message || '策略生成失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '策略生成失败')
     }
     setLoading(false)
   }
@@ -249,10 +250,10 @@ export default function StrategyPage() {
             pagination={false}
             columns={[
               { title: '策略', dataIndex: 'strategy_name', width: 160 },
-              { title: '总收益', dataIndex: 'total_return', width: 80, render: (v: number) => <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>{v.toFixed(2)}%</span>, sorter: (a: any, b: any) => a.total_return - b.total_return },
+              { title: '总收益', dataIndex: 'total_return', width: 80, render: (v: number) => <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>{v.toFixed(2)}%</span>, sorter: (a: AnyData, b: AnyData) => a.total_return - b.total_return },
               { title: '年化', dataIndex: 'annualized_return', width: 80, render: (v: number) => `${v.toFixed(2)}%` },
               { title: '回撤', dataIndex: 'max_drawdown', width: 70, render: (v: number) => <span style={{ color: '#52c41a' }}>{v.toFixed(2)}%</span> },
-              { title: '夏普', dataIndex: 'sharpe_ratio', width: 70, render: (v: number) => v.toFixed(2), sorter: (a: any, b: any) => a.sharpe_ratio - b.sharpe_ratio },
+              { title: '夏普', dataIndex: 'sharpe_ratio', width: 70, render: (v: number) => v.toFixed(2), sorter: (a: AnyData, b: AnyData) => a.sharpe_ratio - b.sharpe_ratio },
               { title: '胜率', dataIndex: 'win_rate', width: 70, render: (v: number) => `${v.toFixed(1)}%` },
               { title: '盈亏比', dataIndex: 'profit_loss_ratio', width: 70, render: (v: number) => v.toFixed(2) },
               { title: '交易数', dataIndex: 'total_trades', width: 70 },

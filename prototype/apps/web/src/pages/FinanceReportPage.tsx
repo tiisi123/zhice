@@ -8,6 +8,7 @@ import * as echarts from 'echarts'
 import Markdown from 'react-markdown'
 import { fetchApi, postApi } from '../api/client'
 import AIDisclaimer from '../components/AIDisclaimer'
+import type { AnyData } from '../api/types'
 
 const { TextArea } = Input
 
@@ -49,7 +50,7 @@ export default function FinanceReportPage() {
   const [code, setCode] = useState('600519')
   const [input, setInput] = useState('600519')
   const [summary, setSummary] = useState<FinSummary | null>(null)
-  const [profile, setProfile] = useState<any>(null)
+  const [profile, setProfile] = useState<AnyData>(null)
   const [anns, setAnns] = useState<Announcement[]>([])
   const [annKind, setAnnKind] = useState<string>('all')
   const [reports, setReports] = useState<ResearchReport[]>([])
@@ -67,7 +68,7 @@ export default function FinanceReportPage() {
     try {
       const [s, p, a, r] = await Promise.allSettled([
         fetchApi<FinSummary>(`/finance/summary/${code}?n=12`),
-        fetchApi<any>(`/finance/profile/${code}`),
+        fetchApi<AnyData>(`/finance/profile/${code}`),
         fetchApi<{ items: Announcement[] }>(`/finance/announcements/${code}?days=180&kind=${annKind}`),
         fetchApi<{ items: ResearchReport[] }>(`/finance/research-reports/${code}?n=15`),
       ])
@@ -79,8 +80,8 @@ export default function FinanceReportPage() {
       if (p.status === 'rejected') {
         message.warning('公司简介暂不可用，已继续展示财务摘要')
       }
-    } catch (e: any) {
-      message.error(e?.message || '加载失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '加载失败')
     } finally {
       setLoading(false)
     }
@@ -132,8 +133,8 @@ export default function FinanceReportPage() {
         text: reportText,
       })
       setAiText(r.analysis || '')
-    } catch (e: any) {
-      message.error(e?.message || 'AI 解读失败')
+    } catch (e) {
+      message.error((e as Error)?.message || 'AI 解读失败')
     } finally {
       setAiLoading(false)
     }
@@ -165,8 +166,8 @@ export default function FinanceReportPage() {
       if (data.warning) message.warning(data.warning)
       setReportText(data.text || '')
       message.success(`已抽取 ${data.char_count} 字${data.truncated ? '（已截断）' : ''}`)
-    } catch (e: any) {
-      message.error(e?.message || 'PDF 解析失败')
+    } catch (e) {
+      message.error((e as Error)?.message || 'PDF 解析失败')
     } finally {
       setAiLoading(false)
     }
@@ -194,8 +195,8 @@ export default function FinanceReportPage() {
       setReportText(data.extracted_text_preview || '')
       setAiText(data.analysis || '')
       message.success(`已解读（PDF 全文 ${data.full_char_count} 字）`)
-    } catch (e: any) {
-      message.error(e?.message || 'PDF 解读失败')
+    } catch (e) {
+      message.error((e as Error)?.message || 'PDF 解读失败')
     } finally {
       setAiLoading(false)
     }

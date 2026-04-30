@@ -11,6 +11,7 @@ import { askAI } from '../api/copilot'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
 import MockBanner from '../components/MockBanner'
+import type { AnyData } from '../api/types'
 
 const ProsperityPage = lazy(() => import('./ProsperityPage'))
 const EtfRotationPage = lazy(() => import('./EtfRotationPage'))
@@ -31,7 +32,7 @@ const DEFAULT_GROWTH_STOCKS = [
 ]
 
 // ========== 景气热力图（嵌入版）==========
-function InlineHeatmap({ industries }: { industries: any[] }) {
+function InlineHeatmap({ industries }: { industries: AnyData[] }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!ref.current || !industries.length) return
@@ -43,7 +44,7 @@ function InlineHeatmap({ industries }: { industries: any[] }) {
       ;[d.q1, d.q2, d.q3, d.q4].forEach((v, xi) => { heatData.push([xi, yi, v]) })
     })
     chart.setOption({
-      tooltip: { formatter: (p: any) => `${names[p.value[1]]} ${quarters[p.value[0]]}: ${p.value[2]}` },
+      tooltip: { formatter: (p: AnyData) => `${names[p.value[1]]} ${quarters[p.value[0]]}: ${p.value[2]}` },
       grid: { left: 90, right: 50, top: 10, bottom: 50 },
       xAxis: { type: 'category', data: quarters },
       yAxis: { type: 'category', data: names, axisLabel: { fontSize: 11 } },
@@ -58,7 +59,7 @@ function InlineHeatmap({ industries }: { industries: any[] }) {
 }
 
 // ========== 拐点雷达 ==========
-function TurningPointRadar({ industries }: { industries: any[] }) {
+function TurningPointRadar({ industries }: { industries: AnyData[] }) {
   const turning = industries.filter(d => {
     const q3 = d.q3 || 0, q4 = d.q4 || 0
     return (q4 - q3 >= 8 && d.trend === 'up') || (q3 - q4 >= 8 && d.trend === 'down')
@@ -97,11 +98,11 @@ function TurningPointRadar({ industries }: { industries: any[] }) {
 // ========== 产业链传导 ==========
 function SupplyChainTransmission() {
   const [src, setSrc] = useState('半导体')
-  const [rotation, setRotation] = useState<any>(null)
+  const [rotation, setRotation] = useState<AnyData>(null)
   const sources = ['半导体', 'AI/算力', '新能源车', '军工', '医药生物', '消费电子']
 
   useEffect(() => {
-    fetchApi<any>(`/growth/rotation?source=${encodeURIComponent(src)}`)
+    fetchApi<AnyData>(`/growth/rotation?source=${encodeURIComponent(src)}`)
       .then(setRotation).catch(() => setRotation(null))
   }, [src])
 
@@ -117,7 +118,7 @@ function SupplyChainTransmission() {
       }
     >
       {rotation?.targets?.length > 0 ? (
-        rotation.targets.map((t: any, i: number) => (
+        rotation.targets.map((t: AnyData, i: number) => (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f5f5f5' }}>
             <Tag color="blue">{src}</Tag>
             <span style={{ color: '#999' }}>→</span>
@@ -128,7 +129,7 @@ function SupplyChainTransmission() {
         ))
       ) : <Empty description="暂无传导数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
       <AskAIChip
-        prompt={`从【${src}】出发的产业链传导路径：${rotation?.targets?.map((t: any) => `${t.target}(概率${t.probability}%,滞后${t.lag_days}天)`).join('→') || '暂无'}。分析传导逻辑和最佳介入时机。`}
+        prompt={`从【${src}】出发的产业链传导路径：${rotation?.targets?.map((t: AnyData) => `${t.target}(概率${t.probability}%,滞后${t.lag_days}天)`).join('→') || '暂无'}。分析传导逻辑和最佳介入时机。`}
         label="AI 传导分析"
       />
     </Card>
@@ -139,24 +140,24 @@ function SupplyChainTransmission() {
 export default function GrowthWorkshopPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') || 'workshop'
-  const [macro, setMacro] = useState<any[]>([])
-  const [industries, setIndustries] = useState<any[]>([])
+  const [macro, setMacro] = useState<AnyData[]>([])
+  const [industries, setIndustries] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
   const [isMock, setIsMock] = useState(false)
-  const [dataStatus, setDataStatus] = useState<any[]>([])
+  const [dataStatus, setDataStatus] = useState<AnyData[]>([])
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([
-      fetchApi<{ indicators: any[] }>('/growth/macro').catch(() => ({ indicators: [] })),
-      fetchApi<{ industries: any[] }>('/growth/prosperity').catch(() => ({ industries: [] })),
+    void Promise.all([
+      fetchApi<{ indicators: AnyData[] }>('/growth/macro').catch(() => ({ indicators: [] })),
+      fetchApi<{ industries: AnyData[] }>('/growth/prosperity').catch(() => ({ industries: [] })),
     ]).then(([m, p]) => {
       setMacro(m.indicators || [])
       setIndustries(p.industries || [])
-      setIsMock(Boolean((m as any).mock || (p as any).mock || m.indicators?.some((i: any) => i.data_source === 'mock')))
+      setIsMock(Boolean((m as AnyData).mock || (p as AnyData).mock || m.indicators?.some((i: AnyData) => i.data_source === 'mock')))
       setDataStatus([
-        { label: '宏观', source: (m as any).source, data_status: (m as any).data_status, message: (m as any).message },
-        { label: '景气', source: (p as any).source, data_status: (p as any).data_status, message: (p as any).message },
+        { label: '宏观', source: (m as AnyData).source, data_status: (m as AnyData).data_status, message: (m as AnyData).message },
+        { label: '景气', source: (p as AnyData).source, data_status: (p as AnyData).data_status, message: (p as AnyData).message },
       ])
     }).finally(() => setLoading(false))
   }, [])

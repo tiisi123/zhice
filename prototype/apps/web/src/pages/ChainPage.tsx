@@ -4,18 +4,19 @@ import { ApartmentOutlined, RobotOutlined, ClockCircleOutlined } from '@ant-desi
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import type { AnyData } from '../api/types'
 
 const STREAM_COLORS: Record<string, string> = { '上游': '#1677ff', '中游': '#52c41a', '下游': '#fa8c16', '个股': '#d9d9d9' }
 
-function ForceGraph({ graph }: { graph: any }) {
+function ForceGraph({ graph }: { graph: AnyData }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!ref.current || !graph) return
     const chart = echarts.init(ref.current)
-    const categories = (graph.categories || []).map((c: any) => ({ ...c, itemStyle: { color: STREAM_COLORS[c.name] || '#999' } }))
+    const categories = (graph.categories || []).map((c: AnyData) => ({ ...c, itemStyle: { color: STREAM_COLORS[c.name] || '#999' } }))
     chart.setOption({
-      tooltip: { formatter: (p: any) => p.dataType === 'node' ? p.data.name : `${p.data.source} → ${p.data.target}` },
-      legend: { data: categories.map((c: any) => c.name), bottom: 0 },
+      tooltip: { formatter: (p: AnyData) => p.dataType === 'node' ? p.data.name : `${p.data.source} → ${p.data.target}` },
+      legend: { data: categories.map((c: AnyData) => c.name), bottom: 0 },
       series: [{
         type: 'graph', layout: 'force', roam: true, draggable: true,
         categories, nodes: graph.nodes || [], links: graph.links || [],
@@ -35,21 +36,21 @@ function ForceGraph({ graph }: { graph: any }) {
 export default function ChainPage() {
   const [chains, setChains] = useState<string[]>([])
   const [selected, setSelected] = useState<string>('')
-  const [detail, setDetail] = useState<any>(null)
-  const [graph, setGraph] = useState<any>(null)
+  const [detail, setDetail] = useState<AnyData>(null)
+  const [graph, setGraph] = useState<AnyData>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchApi<{ chains: string[] }>('/chain/list')
+    void fetchApi<{ chains: string[] }>('/chain/list')
       .then(r => { setChains(r.chains || []); if (r.chains?.length) setSelected(r.chains[0]) })
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
     if (!selected) return
-    Promise.all([
-      fetchApi<any>(`/chain/${encodeURIComponent(selected)}`),
-      fetchApi<any>(`/chain/${encodeURIComponent(selected)}/graph`),
+    void Promise.all([
+      fetchApi<AnyData>(`/chain/${encodeURIComponent(selected)}`),
+      fetchApi<AnyData>(`/chain/${encodeURIComponent(selected)}/graph`),
     ]).then(([d, g]) => { setDetail(d.data || d); setGraph(g.graph || g) })
   }, [selected])
 
@@ -59,7 +60,7 @@ export default function ChainPage() {
   const lag = detail?.transmission_lag || ''
   const streams = ['上游', '中游', '下游']
   const streamData = streams.map(s => {
-    const items = (detail?.nodes || detail || []).filter?.((n: any) => n.stream === s || n.category === s) || []
+    const items = (detail?.nodes || detail || []).filter?.((n: AnyData) => n.stream === s || n.category === s) || []
     return { name: s, count: items.length, items }
   })
 

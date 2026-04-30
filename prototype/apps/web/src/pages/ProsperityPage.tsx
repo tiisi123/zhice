@@ -4,16 +4,17 @@ import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import { RobotOutlined } from '@ant-design/icons'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
 
 function DiffusionTab() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     setLoading(true)
-    fetchApi('/value/diffusion').then(setData).finally(() => setLoading(false))
+    void fetchApi('/value/diffusion').then(setData).finally(() => setLoading(false))
   }, [])
 
   if (loading || !data) return <Spin />
@@ -34,8 +35,8 @@ function DiffusionTab() {
 }
 
 function TurningTab() {
-  const [rows, setRows] = useState<any[]>([])
-  useEffect(() => { fetchApi<{ alerts: any[] }>('/value/turning-points').then((r) => setRows(r.alerts)) }, [])
+  const [rows, setRows] = useState<AnyData[]>([])
+  useEffect(() => { void fetchApi<{ alerts: AnyData[] }>('/value/turning-points').then((r) => setRows(r.alerts)) }, [])
   return (
     <div>
       <Paragraph type="secondary">基于近 4 季度景气度数据侦测方向拐点，命中即输出预警。</Paragraph>
@@ -44,8 +45,8 @@ function TurningTab() {
           { title: '行业', dataIndex: 'industry', width: 160 },
           { title: '方向', dataIndex: 'direction', width: 120,
             render: (v: string) => <Tag color={/上行|转好|拐头向上/.test(v) ? 'red' : 'green'}>{v}</Tag> },
-          { title: '前值', dataIndex: 'q3', width: 100, render: (v: any, r: any) => v ?? r.prev },
-          { title: '现值', dataIndex: 'q4', width: 100, render: (v: any, r: any) => v ?? r.current },
+          { title: '前值', dataIndex: 'q3', width: 100, render: (v: AnyData, r: AnyData) => v ?? r.prev },
+          { title: '现值', dataIndex: 'q4', width: 100, render: (v: AnyData, r: AnyData) => v ?? r.current },
           { title: '变化', dataIndex: 'change', align: 'right' as const },
         ]}
       />
@@ -54,7 +55,7 @@ function TurningTab() {
 }
 
 function WeeklyReportTab() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const [loading, setLoading] = useState(false)
 
   const gen = async () => {
@@ -84,14 +85,15 @@ function WeeklyReportTab() {
 
 function HistoricalCycleTab() {
   const [industry, setIndustry] = useState('半导体')
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const chartRef = useRef<HTMLDivElement>(null)
 
   const load = async () => {
-    const r = await fetchApi<any>('/research/prosperity-cycle', { industry })
+    const r = await fetchApi<AnyData>('/research/prosperity-cycle', { industry })
     setData(r)
   }
-  useEffect(() => { load() }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [])
 
   useEffect(() => {
     if (!data || !chartRef.current) return
@@ -99,10 +101,10 @@ function HistoricalCycleTab() {
     chart.setOption({
       tooltip: { trigger: 'axis' },
       grid: { left: 40, right: 20, top: 20, bottom: 40 },
-      xAxis: { type: 'category', data: data.trajectory.map((r: any) => r.period), axisLabel: { fontSize: 10, rotate: 40 } },
+      xAxis: { type: 'category', data: data.trajectory.map((r: AnyData) => r.period), axisLabel: { fontSize: 10, rotate: 40 } },
       yAxis: { type: 'value', name: '景气度', min: 0, max: 100 },
       series: [{
-        type: 'line', data: data.trajectory.map((r: any) => r.score),
+        type: 'line', data: data.trajectory.map((r: AnyData) => r.score),
         smooth: true, areaStyle: { opacity: 0.2 }, itemStyle: { color: '#1677ff' },
         markLine: { data: [{ yAxis: data.current, name: '当前' }], lineStyle: { color: '#faad14' } },
       }],
@@ -141,17 +143,17 @@ const MACRO_OPTIONS = [
 
 function MacroTransmissionTab() {
   const [change, setChange] = useState('PMI上升')
-  const [chain, setChain] = useState<any[]>([])
+  const [chain, setChain] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(false)
 
   const load = async (c: string) => {
     setLoading(true)
     try {
-      const r = await fetchApi<{ transmission: any[] }>(`/value/macro-transmission/${encodeURIComponent(c)}`)
+      const r = await fetchApi<{ transmission: AnyData[] }>(`/value/macro-transmission/${encodeURIComponent(c)}`)
       setChain(r.transmission || [])
     } finally { setLoading(false) }
   }
-  useEffect(() => { load(change) }, [change])
+  useEffect(() => { void load(change) }, [change])
 
   const layerColor = (layer: string) =>
     layer.startsWith('宏观') ? '#1677ff'
@@ -177,7 +179,7 @@ function MacroTransmissionTab() {
       {loading ? <Spin /> : chain.length === 0 ? <Empty /> : (
         <Card size="small">
           <Timeline
-            items={chain.map((item: any) => ({
+            items={chain.map((item: AnyData) => ({
               color: layerColor(item.layer || ''),
               children: (
                 <div>
@@ -207,17 +209,17 @@ const CHAIN_OPTIONS = [
 
 function ChainProsperityTab() {
   const [chainName, setChainName] = useState('半导体')
-  const [streams, setStreams] = useState<any[]>([])
+  const [streams, setStreams] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(false)
 
   const load = async (n: string) => {
     setLoading(true)
     try {
-      const r = await fetchApi<{ streams: any[] }>(`/value/chain-prosperity/${encodeURIComponent(n)}`)
+      const r = await fetchApi<{ streams: AnyData[] }>(`/value/chain-prosperity/${encodeURIComponent(n)}`)
       setStreams(r.streams || [])
     } catch { setStreams([]) } finally { setLoading(false) }
   }
-  useEffect(() => { load(chainName) }, [chainName])
+  useEffect(() => { void load(chainName) }, [chainName])
 
   const tone = (p: number) => p >= 80 ? '#f5222d' : p >= 65 ? '#fa8c16' : p >= 50 ? '#faad14' : '#52c41a'
   const label = (p: number) => p >= 80 ? '高景气' : p >= 65 ? '景气回升' : p >= 50 ? '中性' : '承压'
@@ -233,14 +235,14 @@ function ChainProsperityTab() {
         />
         <Button
           icon={<RobotOutlined />}
-          onClick={() => askAI(`产业链【${chainName}】上中下游当前景气度对比：${streams.map((s: any) => `${s.stream}=${s.prosperity}`).join('、')}。请分析传导节奏、最具弹性的环节与对应龙头标的。`)}
+          onClick={() => askAI(`产业链【${chainName}】上中下游当前景气度对比：${streams.map((s: AnyData) => `${s.stream}=${s.prosperity}`).join('、')}。请分析传导节奏、最具弹性的环节与对应龙头标的。`)}
         >
           AI 解读传导
         </Button>
       </Space>
       {loading ? <Spin /> : streams.length === 0 ? <Empty description="暂无该产业链的景气传导数据" /> : (
         <Row gutter={[12, 12]}>
-          {streams.map((s: any, i: number) => (
+          {streams.map((s: AnyData, i: number) => (
             <Col key={s.stream} xs={24} md={8}>
               <Card size="small" hoverable>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>

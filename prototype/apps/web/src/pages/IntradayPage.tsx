@@ -5,10 +5,10 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import { useMarketWS } from '../api/useMarketWS'
-import type { LimitUpStock } from '../api/types'
+import type { LimitUpStock, AnyData } from '../api/types'
 import MockBanner from '../components/MockBanner'
 
-function DashboardCards({ limitUp, broken, hot: _hot }: { limitUp: LimitUpStock[]; broken: LimitUpStock[]; hot: any[] }) {
+function DashboardCards({ limitUp, broken, hot: _hot }: { limitUp: LimitUpStock[]; broken: LimitUpStock[]; hot: AnyData[] }) {
   const sealRate = limitUp.length + broken.length > 0
     ? Math.round(limitUp.length / (limitUp.length + broken.length) * 100) : 0
   const maxBoard = Math.max(0, ...limitUp.map(s => s.board_count || 0))
@@ -61,7 +61,7 @@ function LimitUpTable({ data }: { data: LimitUpStock[] }) {
         </Link>
       ),
     },
-    { title: '连板', dataIndex: 'board_count', key: 'b', width: 55, sorter: (a: any, b: any) => (a.board_count || 0) - (b.board_count || 0), defaultSortOrder: 'descend' as const,
+    { title: '连板', dataIndex: 'board_count', key: 'b', width: 55, sorter: (a: AnyData, b: AnyData) => (a.board_count || 0) - (b.board_count || 0), defaultSortOrder: 'descend' as const,
       render: (v: number) => v >= 2 ? <Tag color={v >= 4 ? 'red' : v >= 2 ? 'orange' : 'default'}>{v}板</Tag> : <span style={{ color: '#999' }}>首板</span>,
     },
     { title: '涨幅', dataIndex: 'change_rate', key: 'ch', width: 65,
@@ -77,7 +77,7 @@ function LimitUpTable({ data }: { data: LimitUpStock[] }) {
       render: (v: string) => <span style={{ fontSize: 12, color: '#666' }}>{v || '—'}</span>,
     },
     { title: '', key: 'ai', width: 40,
-      render: (_: any, r: LimitUpStock) => (
+      render: (_: AnyData, r: LimitUpStock) => (
         <Tooltip title="问 AI">
           <RobotOutlined
             style={{ color: '#1677ff', cursor: 'pointer' }}
@@ -122,7 +122,7 @@ function BrokenPanel({ data }: { data: LimitUpStock[] }) {
   )
 }
 
-function HotStockPanel({ data }: { data: any[] }) {
+function HotStockPanel({ data }: { data: AnyData[] }) {
   if (data.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无热股" />
   return (
     <div>
@@ -144,8 +144,8 @@ function HotStockPanel({ data }: { data: any[] }) {
 export default function IntradayPage() {
   const [limitUp, setLimitUp] = useState<LimitUpStock[]>([])
   const [broken, setBroken] = useState<LimitUpStock[]>([])
-  const [hot, setHot] = useState<any[]>([])
-  const [_anomaly, setAnomaly] = useState<any[]>([])
+  const [hot, setHot] = useState<AnyData[]>([])
+  const [_anomaly, setAnomaly] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [isMock, setIsMock] = useState(false)
@@ -169,8 +169,8 @@ export default function IntradayPage() {
       const [lu, br, hs, an] = await Promise.all([
         safe(fetchApi<{ data: LimitUpStock[]; mock?: boolean }>('/market/limit-up')),
         safe(fetchApi<{ data: LimitUpStock[]; mock?: boolean }>('/market/broken')),
-        safe(fetchApi<{ data: any[]; mock?: boolean }>('/market/hot-stocks')),
-        safe(fetchApi<{ data: any[] }>('/market/anomaly')),
+        safe(fetchApi<{ data: AnyData[]; mock?: boolean }>('/market/hot-stocks')),
+        safe(fetchApi<{ data: AnyData[] }>('/market/anomaly')),
       ])
       if (!lu && !br && !hs && !an) {
         setErrMsg('后端 API 不可达，请确认服务已启动。')
@@ -184,7 +184,7 @@ export default function IntradayPage() {
       setIsMock(!!(lu?.mock || br?.mock))
       setLoading(false)
     }
-    load()
+    void load()
   }, [])
 
   const tierSummary = useMemo(() => {

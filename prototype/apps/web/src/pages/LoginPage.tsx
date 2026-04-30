@@ -24,9 +24,9 @@ export default function LoginPage() {
       const res = await postApi<{ user: User; token: string }>('/auth/login', values)
       setAuth(res.token, res.user)
       message.success(`欢迎回来，${res.user.nickname}`)
-      navigate(nextUrl, { replace: true })
-    } catch (e: any) {
-      message.error(e.message || '登录失败')
+      void navigate(nextUrl, { replace: true })
+    } catch (e) {
+      message.error((e as Error)?.message || '登录失败')
     } finally {
       setLoading(false)
     }
@@ -35,7 +35,8 @@ export default function LoginPage() {
   useEffect(() => {
     if (!AUTO_TEST_LOGIN || autoLoginStarted.current) return
     autoLoginStarted.current = true
-    handleLogin(TEST_LOGIN)
+    void handleLogin(TEST_LOGIN)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleRegister = async (values: { phone: string; password: string; nickname: string }) => {
@@ -44,9 +45,9 @@ export default function LoginPage() {
       const res = await postApi<{ user: User; token: string }>('/auth/register', values)
       setAuth(res.token, res.user)
       message.success('注册成功，开始体验')
-      navigate('/onboarding', { replace: true })
-    } catch (e: any) {
-      message.error(e.message || '注册失败')
+      void navigate('/onboarding', { replace: true })
+    } catch (e) {
+      message.error((e as Error)?.message || '注册失败')
     } finally {
       setLoading(false)
     }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, Row, Col, Button, Space, Input, Select, List, Tag, message, Empty, Modal, Alert } from 'antd'
 import { PlusOutlined, DeleteOutlined, SaveOutlined, DragOutlined } from '@ant-design/icons'
 import { fetchApi, postApi, deleteApi } from '../api/client'
+import type { AnyData } from '../api/types'
 
 interface Widget {
   key: string
@@ -35,27 +36,27 @@ export default function DashboardPage() {
     try {
       const r = await fetchApi<{ boards: BoardListRow[] }>('/dashboard/list')
       setBoards(r.boards)
-    } catch (e: any) {
-      message.error(e?.message || '加载看板列表失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '加载看板列表失败')
     }
   }
 
   useEffect(() => {
     fetchApi<{ widgets: Widget[] }>('/dashboard/widgets')
       .then((r) => setWidgets(r.widgets))
-      .catch((e: any) => message.error(e?.message || '加载组件库失败'))
-    refreshBoards()
+      .catch((e: AnyData) => message.error((e as Error)?.message || '加载组件库失败'))
+    void refreshBoards()
   }, [])
 
   const loadBoard = async (id: number) => {
     try {
-      const r = await fetchApi<any>(`/dashboard/${id}`)
-      const keys = (r.layout || []).map((i: any) => (typeof i === 'string' ? i : i.key)).filter(Boolean)
+      const r = await fetchApi<AnyData>(`/dashboard/${id}`)
+      const keys = (r.layout || []).map((i: AnyData) => (typeof i === 'string' ? i : i.key)).filter(Boolean)
       setCurrent({ id: r.id, name: r.name, layout: keys, is_default: r.is_default })
       setName(r.name)
       setLayout(keys)
-    } catch (e: any) {
-      message.error(e?.message || '加载看板失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '加载看板失败')
     }
   }
 
@@ -77,9 +78,9 @@ export default function DashboardPage() {
     try {
       await postApi('/dashboard/save', payload)
       message.success('已保存')
-      refreshBoards()
-    } catch (e: any) {
-      message.error(e?.message || '保存失败')
+      void refreshBoards()
+    } catch (e) {
+      message.error((e as Error)?.message || '保存失败')
     }
   }
 
@@ -89,7 +90,7 @@ export default function DashboardPage() {
       onOk: async () => {
         await deleteApi(`/dashboard/${id}`)
         if (current?.id === id) { setCurrent(null); setLayout([]) }
-        refreshBoards()
+        void refreshBoards()
       },
     })
   }

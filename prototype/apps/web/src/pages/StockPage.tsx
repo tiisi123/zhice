@@ -12,12 +12,13 @@ import MockBanner from '../components/MockBanner'
 import { watchlistApi } from '../api/watchlist'
 import { message as antMessage } from 'antd'
 import { StarOutlined } from '@ant-design/icons'
+import type { AnyData } from '../api/types'
 
 const LABEL_COLORS: Record<string, string> = {
   '首板': '#fa8c16', '连板': '#f5222d', '炸板': '#faad14', '热股': '#1677ff',
 }
 
-function StockIdentity({ data }: { data: any }) {
+function StockIdentity({ data }: { data: AnyData }) {
   const label = data.kline_label || '—'
   const bc = data.board_count || 0
   const cr = data.change_rate || 0
@@ -39,7 +40,7 @@ function StockIdentity({ data }: { data: any }) {
   )
 }
 
-function ReasonCard({ data }: { data: any }) {
+function ReasonCard({ data }: { data: AnyData }) {
   return (
     <Card title={<span><ThunderboltOutlined style={{ color: '#fa8c16' }} /> 涨停解码</span>} size="small" style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 14, lineHeight: 2 }}>
@@ -58,7 +59,7 @@ function ReasonCard({ data }: { data: any }) {
   )
 }
 
-function CapitalCard({ cf }: { cf: any }) {
+function CapitalCard({ cf }: { cf: AnyData }) {
   if (!cf) return <Card size="small"><Empty description="暂无资金数据" /></Card>
   const turnover = cf.turnover_ratio || 0
   const cap = cf.non_restricted_capital || 0
@@ -88,7 +89,7 @@ function CapitalCard({ cf }: { cf: any }) {
 
 // PRD M4A-06: 强势股模式匹配
 function PatternMatchCard({ code, name }: { code: string; name: string }) {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const [loading, setLoading] = useState(false)
   const chartRef = useRef<HTMLDivElement>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -96,7 +97,7 @@ function PatternMatchCard({ code, name }: { code: string; name: string }) {
   useEffect(() => {
     if (!code) return
     setLoading(true)
-    fetchApi<any>(`/stock/${code}/pattern-match?top_k=5`)
+    fetchApi<AnyData>(`/stock/${code}/pattern-match?top_k=5`)
       .then(r => { setData(r); setSelectedId(r?.matches?.[0]?.id || null) })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
@@ -104,7 +105,7 @@ function PatternMatchCard({ code, name }: { code: string; name: string }) {
 
   useEffect(() => {
     if (!chartRef.current || !data?.query_seq) return
-    const selected = (data.matches || []).find((m: any) => m.id === selectedId) || data.matches?.[0]
+    const selected = (data.matches || []).find((m: AnyData) => m.id === selectedId) || data.matches?.[0]
     const chart = echarts.init(chartRef.current)
     chart.setOption({
       tooltip: { trigger: 'axis' },
@@ -147,7 +148,7 @@ function PatternMatchCard({ code, name }: { code: string; name: string }) {
           <Table
             size="small" pagination={false} rowKey="id"
             dataSource={data.matches}
-            onRow={(r: any) => ({ onClick: () => setSelectedId(r.id), style: { cursor: 'pointer', background: r.id === selectedId ? '#fff7e6' : undefined } })}
+            onRow={(r: AnyData) => ({ onClick: () => setSelectedId(r.id), style: { cursor: 'pointer', background: r.id === selectedId ? '#fff7e6' : undefined } })}
             columns={[
               { title: '形态', dataIndex: 'name', width: 130 },
               { title: '历史样本', dataIndex: 'stock', width: 120 },
@@ -165,7 +166,7 @@ function PatternMatchCard({ code, name }: { code: string; name: string }) {
   )
 }
 
-function LinkedStocks({ stocks }: { stocks: any[] }) {
+function LinkedStocks({ stocks }: { stocks: AnyData[] }) {
   if (!stocks || stocks.length === 0) return null
   return (
     <Card title={<span><TeamOutlined style={{ color: '#722ed1' }} /> 同题材联动</span>} size="small" style={{ marginBottom: 16 }}>
@@ -187,7 +188,7 @@ export default function StockPage() {
   const { code: routeCode } = useParams()
   const [code, setCode] = useState(routeCode || '600519')
   const [inputCode, setInputCode] = useState(routeCode || '600519')
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const [insight, setInsight] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [insightLoading, setInsightLoading] = useState(false)
@@ -196,19 +197,19 @@ export default function StockPage() {
     if (!c.trim()) return
     setLoading(true); setInsight(null)
     try {
-      const detail = await fetchApi<any>(`/stock/${c}`)
+      const detail = await fetchApi<AnyData>(`/stock/${c}`)
       setData(detail)
     } catch { setData(null) }
     setLoading(false)
   }
 
   useEffect(() => { if (routeCode) { setCode(routeCode); setInputCode(routeCode) } }, [routeCode])
-  useEffect(() => { if (code) load(code) }, [code])
+  useEffect(() => { if (code) void load(code) }, [code])
 
   useEffect(() => {
     if (data?.found && code) {
       setInsightLoading(true)
-      fetchApi<any>(`/ai/stock-insight/${code}`)
+      fetchApi<AnyData>(`/ai/stock-insight/${code}`)
         .then(r => setInsight(r.report))
         .catch(() => setInsight(null))
         .finally(() => setInsightLoading(false))
@@ -237,8 +238,8 @@ export default function StockPage() {
                   alert_limit_up: true, alert_broken: true,
                 })
                 antMessage.success(`已加入研究池：${data.name || data.code}`)
-              } catch (e: any) {
-                if (String(e?.message || '').includes('已在')) antMessage.info('该股票已在研究池中')
+              } catch (e) {
+                if (String((e as Error)?.message || '').includes('已在')) antMessage.info('该股票已在研究池中')
                 else antMessage.error('加入失败，请确认已登录')
               }
             }}

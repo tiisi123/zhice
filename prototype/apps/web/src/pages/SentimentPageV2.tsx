@@ -7,6 +7,7 @@ import * as echarts from 'echarts'
 import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import type { AnyData } from '../api/types'
 
 interface SentimentRecord {
   date: string
@@ -153,7 +154,7 @@ function SectionCycleChart({ data }: { data: SentimentRecord[] }) {
     const dates = data.map(d => d.date.slice(5))
 
     // 情绪背景填色区（markArea 按情绪段）
-    const markAreas: any[] = []
+    const markAreas: AnyData[] = []
     let segStart = 0
     for (let i = 1; i <= data.length; i++) {
       if (i === data.length || data[i].sentiment !== data[segStart].sentiment) {
@@ -169,7 +170,7 @@ function SectionCycleChart({ data }: { data: SentimentRecord[] }) {
     chart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
+        formatter: (params: AnyData) => {
           const idx = params[0].dataIndex
           const r = data[idx]
           return `${r.date}<br/>情绪: <b style="color:${SENT_COLOR[r.sentiment]||'#999'}">${r.sentiment}</b><br/>涨停: ${r.limit_up} · 炸板: ${r.broken}<br/>炸板率: ${r.broken_rate}% · 最高板: ${r.max_board}`
@@ -186,7 +187,7 @@ function SectionCycleChart({ data }: { data: SentimentRecord[] }) {
         {
           name: '涨停', type: 'bar', data: data.map(d => d.limit_up),
           itemStyle: {
-            color: (p: any) => SENT_COLOR[data[p.dataIndex].sentiment] || '#999',
+            color: (p: AnyData) => SENT_COLOR[data[p.dataIndex].sentiment] || '#999',
             opacity: 0.75,
           },
           markArea: { silent: true, data: markAreas },

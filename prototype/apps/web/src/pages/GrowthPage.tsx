@@ -5,14 +5,16 @@ import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import MockBanner from '../components/MockBanner'
+import type { ReactNode } from 'react'
+import type { AnyData } from '../api/types'
 
-const dirIcon: Record<string, any> = {
+const dirIcon: Record<string, ReactNode> = {
   up: <ArrowUpOutlined style={{ color: '#f5222d' }} />,
   down: <ArrowDownOutlined style={{ color: '#52c41a' }} />,
   flat: <MinusOutlined style={{ color: '#999' }} />,
 }
 
-function MacroCards({ data }: { data: any[] }) {
+function MacroCards({ data }: { data: AnyData[] }) {
   const key3 = data.filter(d => ['PMI', 'CPI', '社融'].includes(d.name)).slice(0, 3)
   if (key3.length === 0) return null
   return (
@@ -34,7 +36,7 @@ function MacroCards({ data }: { data: any[] }) {
   )
 }
 
-function HeatmapChart({ industries }: { industries: any[] }) {
+function HeatmapChart({ industries }: { industries: AnyData[] }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!ref.current || !industries.length) return
@@ -46,7 +48,7 @@ function HeatmapChart({ industries }: { industries: any[] }) {
       ;[d.q1, d.q2, d.q3, d.q4].forEach((v, xi) => { heatData.push([xi, yi, v]) })
     })
     chart.setOption({
-      tooltip: { formatter: (p: any) => `${names[p.value[1]]} ${quarters[p.value[0]]}: ${p.value[2]}` },
+      tooltip: { formatter: (p: AnyData) => `${names[p.value[1]]} ${quarters[p.value[0]]}: ${p.value[2]}` },
       grid: { left: 90, right: 50, top: 10, bottom: 60 },
       xAxis: { type: 'category', data: quarters },
       yAxis: { type: 'category', data: names, axisLabel: { fontSize: 11 } },
@@ -60,13 +62,13 @@ function HeatmapChart({ industries }: { industries: any[] }) {
   return <div ref={ref} style={{ width: '100%', height: 460 }} />
 }
 
-function RotationPanel({ industries: _industries }: { industries: any[] }) {
+function RotationPanel({ industries: _industries }: { industries: AnyData[] }) {
   const [src, setSrc] = useState('半导体')
-  const [rotation, setRotation] = useState<any>(null)
+  const [rotation, setRotation] = useState<AnyData>(null)
   const sources = ['半导体', 'AI/算力', '新能源车', '军工', '医药生物']
 
   useEffect(() => {
-    fetchApi<any>(`/growth/rotation?source=${encodeURIComponent(src)}`).then(setRotation).catch(() => setRotation(null))
+    fetchApi<AnyData>(`/growth/rotation?source=${encodeURIComponent(src)}`).then(setRotation).catch(() => setRotation(null))
   }, [src])
 
   return (
@@ -75,7 +77,7 @@ function RotationPanel({ industries: _industries }: { industries: any[] }) {
     >
       {rotation?.targets?.length > 0 ? (
         <Space direction="vertical" size={8} style={{ width: '100%' }}>
-          {rotation.targets.map((t: any, i: number) => (
+          {rotation.targets.map((t: AnyData, i: number) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f0f0f0' }}>
               <Tag color="blue">{src}</Tag>
               <span style={{ fontSize: 16, color: '#999' }}>→</span>
@@ -95,14 +97,14 @@ function RotationPanel({ industries: _industries }: { industries: any[] }) {
   )
 }
 
-function CompareTab({ industries }: { industries: any[] }) {
+function CompareTab({ industries }: { industries: AnyData[] }) {
   const [selected, setSelected] = useState<string[]>(['半导体', 'AI/算力', '新能源车'])
-  const [compared, setCompared] = useState<any[]>([])
+  const [compared, setCompared] = useState<AnyData[]>([])
   const chartRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (selected.length < 2) return
-    fetchApi<{ compared: any[] }>(`/growth/prosperity/compare?names=${selected.join(',')}`).then(r => setCompared(r.compared)).catch(() => {})
+    fetchApi<{ compared: AnyData[] }>(`/growth/prosperity/compare?names=${selected.join(',')}`).then(r => setCompared(r.compared)).catch(() => {})
   }, [selected])
 
   useEffect(() => {
@@ -124,7 +126,7 @@ function CompareTab({ industries }: { industries: any[] }) {
   return (
     <div>
       <Select mode="multiple" value={selected} onChange={setSelected} style={{ width: '100%', marginBottom: 12 }}
-        options={industries.map((d: any) => ({ label: d.industry, value: d.industry }))} placeholder="选择行业对比（至少2个）" />
+        options={industries.map((d: AnyData) => ({ label: d.industry, value: d.industry }))} placeholder="选择行业对比（至少2个）" />
       {compared.length > 0 && <div ref={chartRef} style={{ width: '100%', height: 360 }} />}
       <Button type="link" icon={<RobotOutlined />} style={{ marginTop: 8 }}
         onClick={() => askAI(`对比行业景气度：${selected.join('、')}。哪个行业Q4景气度最高？哪个行业拐点最明显？给出投资优先级排序。`)}>
@@ -135,19 +137,19 @@ function CompareTab({ industries }: { industries: any[] }) {
 }
 
 export default function GrowthPage() {
-  const [macro, setMacro] = useState<any[]>([])
-  const [industries, setIndustries] = useState<any[]>([])
+  const [macro, setMacro] = useState<AnyData[]>([])
+  const [industries, setIndustries] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
   const [isMock, setIsMock] = useState(false)
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([
-      fetchApi<{ indicators: any[] }>('/growth/macro'),
-      fetchApi<{ industries: any[] }>('/growth/prosperity'),
+    void Promise.all([
+      fetchApi<{ indicators: AnyData[] }>('/growth/macro'),
+      fetchApi<{ industries: AnyData[] }>('/growth/prosperity'),
     ]).then(([m, p]) => {
       setMacro(m.indicators); setIndustries(p.industries)
-      setIsMock(m.indicators?.some((i: any) => i.data_source === 'mock'))
+      setIsMock(m.indicators?.some((i: AnyData) => i.data_source === 'mock'))
     })
       .finally(() => setLoading(false))
   }, [])
@@ -188,8 +190,8 @@ export default function GrowthPage() {
           children: (
             <Table dataSource={macro} columns={[
               { title: '指标', dataIndex: 'name', key: 'n', width: 120 },
-              { title: '最新值', key: 'v', width: 100, render: (_: any, r: any) => <span style={{ fontWeight: 600 }}>{r.value}{r.unit}</span> },
-              { title: '前值', key: 'p', width: 100, render: (_: any, r: any) => `${r.prev}${r.unit}` },
+              { title: '最新值', key: 'v', width: 100, render: (_: AnyData, r: AnyData) => <span style={{ fontWeight: 600 }}>{r.value}{r.unit}</span> },
+              { title: '前值', key: 'p', width: 100, render: (_: AnyData, r: AnyData) => `${r.prev}${r.unit}` },
               { title: '趋势', dataIndex: 'direction', key: 'd', width: 60, render: (v: string) => dirIcon[v] },
               { title: '日期', dataIndex: 'date', key: 'dt', width: 100 },
             ]} rowKey="name" size="small" pagination={false} />

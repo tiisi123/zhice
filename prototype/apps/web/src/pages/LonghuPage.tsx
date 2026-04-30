@@ -3,6 +3,7 @@ import { Alert, Card, Table, Tag, Space, DatePicker, Button, Input, Empty } from
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs, { Dayjs } from 'dayjs'
 import { fetchApi } from '../api/client'
+import type { AnyData } from '../api/types'
 
 interface SeatRow {
   seat: string
@@ -53,7 +54,7 @@ export default function LonghuPage() {
       setRows(r.rank || [])
       setErr('')
       setMeta({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message || r.note })
-    } catch (e: any) {
+    } catch {
       setRows([])
       setErr('龙虎榜接口不可用，当前不展示席位数据。')
       setMeta({})
@@ -62,7 +63,8 @@ export default function LonghuPage() {
     }
   }
 
-  useEffect(() => { load() }, [date])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [date])
 
   const filtered = filter ? rows.filter((r) => (r.alias || '').includes(filter) || r.seat.includes(filter)) : rows
 
@@ -106,11 +108,11 @@ export default function LonghuPage() {
                 dataSource={r.stocks}
                 locale={{ emptyText: <Empty description="暂无上榜个股" /> }}
                 columns={[
-                  { title: '代码', width: 100, render: (_: any, row: any) => stockCode(row) || '—' },
-                  { title: '名称', width: 140, render: (_: any, row: any) => stockName(row) },
+                  { title: '代码', width: 100, render: (_: AnyData, row: AnyData) => stockCode(row) || '—' },
+                  { title: '名称', width: 140, render: (_: AnyData, row: AnyData) => stockName(row) },
                   { title: '买入', dataIndex: 'buy', render: (v) => fmt(v), align: 'right' as const },
                   { title: '卖出', dataIndex: 'sell', render: (v) => fmt(v), align: 'right' as const },
-                  { title: '净额', render: (_: any, row: any) => {
+                  { title: '净额', render: (_: AnyData, row: AnyData) => {
                     const net = Number(row.buy) - Number(row.sell)
                     return <span style={{ color: net >= 0 ? '#f5222d' : '#389e0d' }}>{fmt(net)}</span>
                   }, align: 'right' as const },

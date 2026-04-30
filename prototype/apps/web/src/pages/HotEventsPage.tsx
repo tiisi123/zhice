@@ -68,8 +68,8 @@ export default function HotEventsPage() {
     try {
       const r = await postApi<{ analysis: string }>('/news/link-themes', { text })
       setAiText(r.analysis || '')
-    } catch (e: any) {
-      message.error(e?.message || 'AI 分析失败')
+    } catch (e) {
+      message.error((e as Error)?.message || 'AI 分析失败')
     } finally {
       setAiLoading(false)
     }

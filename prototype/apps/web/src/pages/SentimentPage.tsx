@@ -4,6 +4,7 @@ import { RobotOutlined, ArrowUpOutlined, WarningOutlined, ExperimentOutlined } f
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import type { AnyData } from '../api/types'
 
 interface SentimentRecord {
   date: string; limit_up: number; broken: number; broken_rate: number
@@ -111,7 +112,7 @@ function SentimentChart({ data }: { data: SentimentRecord[] }) {
     chart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (ps: any) => {
+        formatter: (ps: AnyData) => {
           const i = ps[0]?.dataIndex; const d = data[i]
           if (!d) return ''
           return `<b>${d.date}</b><br/>情绪：${d.sentiment}<br/>涨停：${d.limit_up}<br/>炸板：${d.broken}（${d.broken_rate}%）<br/>最高板：${d.max_board}`

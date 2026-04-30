@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Card, Table, Typography, Row, Col, Statistic, Space, Button } from 'antd'
 import { fetchApi } from '../api/client'
+import type { AnyData } from '../api/types'
 
 const { Title } = Typography
 
 export default function SettingsPage() {
-  const [events, setEvents] = useState<any[]>([])
+  const [events, setEvents] = useState<AnyData[]>([])
   const [stats, setStats] = useState<{ event: string; cnt: number }[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -13,7 +14,7 @@ export default function SettingsPage() {
     setLoading(true)
     try {
       const [e, s] = await Promise.all([
-        fetchApi<{ events: any[] }>('/events/mine', { limit: '100' }),
+        fetchApi<{ events: AnyData[] }>('/events/mine', { limit: '100' }),
         fetchApi<{ stats: { event: string; cnt: number }[] }>('/events/stats', { days: '7' }),
       ])
       setEvents(e.events)
@@ -21,7 +22,7 @@ export default function SettingsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   return (
     <div>

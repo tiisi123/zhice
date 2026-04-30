@@ -3,21 +3,22 @@ import { Card, Col, Row, Input, Button, Descriptions, Tag, Table, Statistic, Spi
 import { RobotOutlined, RiseOutlined, FallOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import type { AnyData } from '../api/types'
 
 export default function ValuationPage() {
   const [code, setCode] = useState('600519')
-  const [fin, setFin] = useState<any>(null)
-  const [exps, setExps] = useState<any[]>([])
-  const [dcf, setDcf] = useState<any>(null)
-  const [forecast, setForecast] = useState<any>(null)
-  const [screen, setScreen] = useState<any[]>([])
+  const [fin, setFin] = useState<AnyData>(null)
+  const [exps, setExps] = useState<AnyData[]>([])
+  const [dcf, setDcf] = useState<AnyData>(null)
+  const [forecast, setForecast] = useState<AnyData>(null)
+  const [screen, setScreen] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(false)
   const [growth, setGrowth] = useState(10)
   const [aiReport, setAiReport] = useState<string | null>(null)
   const [aiLoading, setAiLoading] = useState(false)
-  const [altData, setAltData] = useState<any[]>([])
-  const [expHistory, setExpHistory] = useState<any[]>([])
-  const [dataStatus, setDataStatus] = useState<any[]>([])
+  const [altData, setAltData] = useState<AnyData[]>([])
+  const [expHistory, setExpHistory] = useState<AnyData[]>([])
+  const [dataStatus, setDataStatus] = useState<AnyData[]>([])
 
   const load = async (c: string) => {
     setLoading(true)
@@ -28,12 +29,12 @@ export default function ValuationPage() {
     setAiReport(null)
     try {
       const [f, e, d, fc, alt, eh] = await Promise.all([
-        fetchApi<any>(`/value/financial/${c}`).catch(() => null),
-        fetchApi<any>(`/value/expectations/${c}`).catch(() => null),
-        fetchApi<any>(`/value/dcf/${c}?growth=${growth / 100}`).catch(() => null),
-        fetchApi<any>(`/value/forecast/${c}`).catch(() => null),
-        fetchApi<any>(`/value/alternative/${c}`).catch(() => null),
-        fetchApi<any>(`/value/expectation-history/${c}`).catch(() => null),
+        fetchApi<AnyData>(`/value/financial/${c}`).catch(() => null),
+        fetchApi<AnyData>(`/value/expectations/${c}`).catch(() => null),
+        fetchApi<AnyData>(`/value/dcf/${c}?growth=${growth / 100}`).catch(() => null),
+        fetchApi<AnyData>(`/value/forecast/${c}`).catch(() => null),
+        fetchApi<AnyData>(`/value/alternative/${c}`).catch(() => null),
+        fetchApi<AnyData>(`/value/expectation-history/${c}`).catch(() => null),
       ])
       setFin(f?.data || null)
       setExps(e?.expectations || [])
@@ -43,14 +44,14 @@ export default function ValuationPage() {
       setExpHistory(eh?.history || [])
       setDataStatus([
         { label: '基本面', source: f?.source, data_status: f?.data_status, mock: f?.mock, message: f?.message },
-        { label: '卖方预期', source: e?.source, data_status: e?.data_status, mock: e?.mock, message: e?.message },
+        { label: '卖方预期', source: e?.source, data_status: e?.data_status, mock: e?.mock, message: (e as Error)?.message },
         { label: 'DCF', source: d?.source, data_status: d?.data_status, mock: d?.mock, message: d?.message },
         { label: '财务预测', source: fc?.source, data_status: fc?.data_status, mock: fc?.mock, message: fc?.message },
         { label: '另类数据', source: alt?.source, data_status: alt?.data_status, mock: alt?.mock, message: alt?.message },
         { label: '预期历史', source: eh?.source, data_status: eh?.data_status, mock: eh?.mock, message: eh?.message },
       ].filter(s => s.source || s.data_status || s.mock))
-    } catch (e: any) {
-      message.error(e.message || '获取估值数据失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '获取估值数据失败')
     }
     setLoading(false)
   }
@@ -60,15 +61,16 @@ export default function ValuationPage() {
     try {
       const r = await fetchApi<{ analysis: string }>(`/value/ai-analysis/${code}`)
       setAiReport(r.analysis)
-    } catch (e: any) {
-      message.error(e.message || 'AI分析失败')
+    } catch (e) {
+      message.error((e as Error)?.message || 'AI分析失败')
     }
     setAiLoading(false)
   }
 
-  useEffect(() => { load(code) }, [code])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load(code) }, [code])
   useEffect(() => {
-    fetchApi<any>('/value/screen?max_pe=30&min_roe=15&min_div=1.0').then(r => setScreen(r.stocks || []))
+    void fetchApi<AnyData>('/value/screen?max_pe=30&min_roe=15&min_div=1.0').then(r => setScreen(r.stocks || []))
   }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />
@@ -155,7 +157,7 @@ export default function ValuationPage() {
                     </Card>
                     {forecast && (
                       <Card title="财务预测" size="small">
-                        {Object.entries(forecast).map(([label, data]: [string, any]) => (
+                        {Object.entries(forecast).map(([label, data]: [string, AnyData]) => (
                           <Descriptions key={label} title={label} column={2} size="small" style={{ marginBottom: 8 }}>
                             <Descriptions.Item label="营收">{data.revenue}亿</Descriptions.Item>
                             <Descriptions.Item label="净利">{data.net_profit}亿</Descriptions.Item>

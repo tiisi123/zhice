@@ -1,3 +1,11 @@
+// M001/S01 escape-hatch types for dynamic API responses & loose Antd row shapes.
+// S02 (data contract slice) will narrow these per-route. Using `any` here is
+// explicit and gated; future code should prefer concrete interfaces below.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyData = any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type AnyRecord = Record<string, any>
+
 export interface HeadlineResp {
   trade_date: string
   headline: string
@@ -61,7 +69,7 @@ export interface Sector {
   ChangePercent?: number
   concept_increase?: number
   PlateID?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 export interface Theme {

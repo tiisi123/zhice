@@ -5,7 +5,7 @@ import * as echarts from 'echarts'
 import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
-import type { PortfolioData, PortfolioStock } from '../api/types'
+import type { PortfolioData, PortfolioStock, AnyData } from '../api/types'
 
 function PortfolioSummary({ data }: { data: PortfolioData }) {
   const pnlColor = data.total_pnl >= 0 ? '#f5222d' : '#52c41a'
@@ -96,13 +96,13 @@ export default function ValuePage() {
         {highPE.length > 0 && <Tag color="red">估值偏高：{highPE.map(s => s.name).join('、')}</Tag>}
       </div>
 
-      {(data as any).mock && (
+      {(data as AnyData).mock && (
         <Alert
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
           message="当前持仓为示例数据"
-          description={`${(data as any).source || 'sample_portfolio'} / ${(data as any).data_status || 'stale'}。${(data as any).message || '真实用户持仓待接入。'}`}
+          description={`${(data as AnyData).source || 'sample_portfolio'} / ${(data as AnyData).data_status || 'stale'}。${(data as AnyData).message || '真实用户持仓待接入。'}`}
         />
       )}
 

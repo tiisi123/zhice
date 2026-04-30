@@ -2,26 +2,28 @@ import { useEffect, useState } from 'react'
 import { Card, Tabs, Table, Tag, Space, Input, Button, Select, Typography, Timeline, Alert, Spin } from 'antd'
 import { fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
 
 function AnnouncementsTab() {
   const [days, setDays] = useState(7)
   const [kind, setKind] = useState<string | undefined>()
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState<any>(null)
+  const [status, setStatus] = useState<AnyData>(null)
 
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetchApi<{ items: any[] }>('/research/announcements',
+      const r = await fetchApi<{ items: AnyData[] }>('/research/announcements',
         { days: String(days), ...(kind ? { kind } : {}) })
       setRows(r.items)
-      setStatus({ source: (r as any).source, data_status: (r as any).data_status, mock: (r as any).mock, message: (r as any).message })
+      setStatus({ source: (r as AnyData).source, data_status: (r as AnyData).data_status, mock: (r as AnyData).mock, message: (r as AnyData).message })
     } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [days, kind])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [days, kind])
 
   return (
     <div>
@@ -52,7 +54,7 @@ function AnnouncementsTab() {
           { title: '日期', dataIndex: 'date', width: 110 },
           { title: '代码', dataIndex: 'code', width: 90 },
           { title: '名称', dataIndex: 'name', width: 120 },
-          { title: '类别', dataIndex: 'kind', width: 120, render: (v: string, r: any) => <Tag color={r.color}>{v}</Tag> },
+          { title: '类别', dataIndex: 'kind', width: 120, render: (v: string, r: AnyData) => <Tag color={r.color}>{v}</Tag> },
           { title: '影响', dataIndex: 'impact', width: 80, render: (v: string) => <Tag color={v === '正面' ? 'red' : v === '负面' ? 'green' : 'default'}>{v}</Tag> },
           { title: '标题', dataIndex: 'title', ellipsis: true },
           { title: '摘要', dataIndex: 'summary', ellipsis: true },
@@ -64,18 +66,18 @@ function AnnouncementsTab() {
 
 function InterpretTab() {
   const [code, setCode] = useState('600519')
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const [loading, setLoading] = useState(false)
-  const [status, setStatus] = useState<any>(null)
+  const [status, setStatus] = useState<AnyData>(null)
 
   const load = async () => {
     setLoading(true)
     try {
-      const r = await fetchApi<any>(`/research/interpret/${code}`)
+      const r = await fetchApi<AnyData>(`/research/interpret/${code}`)
       setData(r.data)
       setStatus({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message })
-    } catch (e: any) {
-      setData({ summary: '获取失败：' + e.message, highlights: [], risks: [] })
+    } catch (e) {
+      setData({ summary: '获取失败：' + (e as Error)?.message, highlights: [], risks: [] })
       setStatus(null)
     } finally { setLoading(false) }
   }
@@ -107,15 +109,16 @@ function InterpretTab() {
 
 function AltDataTab() {
   const [industry, setIndustry] = useState<string | undefined>()
-  const [rows, setRows] = useState<any[]>([])
-  const [status, setStatus] = useState<any>(null)
+  const [rows, setRows] = useState<AnyData[]>([])
+  const [status, setStatus] = useState<AnyData>(null)
 
   const load = async () => {
-    const r = await fetchApi<{ items: any[] }>('/research/alt-data', industry ? { industry } : undefined)
+    const r = await fetchApi<{ items: AnyData[] }>('/research/alt-data', industry ? { industry } : undefined)
     setRows(r.items)
-    setStatus({ source: (r as any).source, data_status: (r as any).data_status, mock: (r as any).mock, message: (r as any).message })
+    setStatus({ source: (r as AnyData).source, data_status: (r as AnyData).data_status, mock: (r as AnyData).mock, message: (r as AnyData).message })
   }
-  useEffect(() => { load() }, [industry])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [industry])
 
   return (
     <div>
@@ -156,15 +159,16 @@ function AltDataTab() {
 
 function SellsideTab() {
   const [code, setCode] = useState('600519')
-  const [rows, setRows] = useState<any[]>([])
-  const [status, setStatus] = useState<any>(null)
+  const [rows, setRows] = useState<AnyData[]>([])
+  const [status, setStatus] = useState<AnyData>(null)
 
   const load = async () => {
-    const r = await fetchApi<{ timeline: any[] }>(`/research/sellside/${code}`)
+    const r = await fetchApi<{ timeline: AnyData[] }>(`/research/sellside/${code}`)
     setRows(r.timeline)
-    setStatus({ source: (r as any).source, data_status: (r as any).data_status, mock: (r as any).mock, message: (r as any).message })
+    setStatus({ source: (r as AnyData).source, data_status: (r as AnyData).data_status, mock: (r as AnyData).mock, message: (r as AnyData).message })
   }
-  useEffect(() => { load() }, [code])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void load() }, [code])
 
   return (
     <div>

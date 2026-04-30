@@ -7,18 +7,19 @@ import {
 } from '@ant-design/icons'
 import { fetchApi } from '../api/client'
 import { AskAIChip } from '../components/smart'
+import type { AnyData } from '../api/types'
 
 export default function ToolsHomePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') || 'todo'
-  const [alerts, setAlerts] = useState<any[]>([])
-  const [reports, setReports] = useState<any[]>([])
+  const [alerts, setAlerts] = useState<AnyData[]>([])
+  const [reports, setReports] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      fetchApi<{ alerts: any[] }>('/watchlist/check-alerts').catch(() => ({ alerts: [] })),
-      fetchApi<{ items: any[] }>('/analysis/report-archive?limit=5').catch(() => ({ items: [] })),
+    void Promise.all([
+      fetchApi<{ alerts: AnyData[] }>('/watchlist/check-alerts').catch(() => ({ alerts: [] })),
+      fetchApi<{ items: AnyData[] }>('/analysis/report-archive?limit=5').catch(() => ({ items: [] })),
     ]).then(([a, r]) => {
       setAlerts(a.alerts || [])
       setReports(r.items || [])
@@ -66,7 +67,7 @@ export default function ToolsHomePage() {
                 <Col xs={24} lg={12}>
                   <Card size="small" title={<span><BellOutlined /> 研究池异动</span>}>
                     {alerts.length === 0 ? <Empty description="暂无异动" image={Empty.PRESENTED_IMAGE_SIMPLE} /> :
-                      alerts.slice(0, 8).map((a: any, i: number) => (
+                      alerts.slice(0, 8).map((a: AnyData, i: number) => (
                         <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5', fontSize: 13 }}>
                           <Link to={`/stock/${a.code}`} style={{ fontWeight: 600 }}>{a.name || a.code}</Link>
                           <Tag color="orange" style={{ marginLeft: 8 }}>{a.kind}</Tag>
@@ -79,7 +80,7 @@ export default function ToolsHomePage() {
                 <Col xs={24} lg={12}>
                   <Card size="small" title={<span><FileTextOutlined /> 最近报告</span>}>
                     {reports.length === 0 ? <Empty description="暂无报告" image={Empty.PRESENTED_IMAGE_SIMPLE} /> :
-                      reports.map((r: any) => (
+                      reports.map((r: AnyData) => (
                         <div key={r.id} style={{ padding: '6px 0', borderBottom: '1px solid #f5f5f5', fontSize: 13 }}>
                           <span style={{ color: '#999', marginRight: 8 }}>{r.trade_date}</span>
                           <span style={{ fontWeight: 500 }}>{r.title}</span>

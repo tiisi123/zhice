@@ -129,7 +129,7 @@ function ThemeHeatBubble({ sectors, cycles, onSelect }: {
 
     chart.setOption({
       tooltip: {
-        formatter: (p: any) => {
+        formatter: (p: AnyData) => {
           const d = p.data
           const cycle = cycles[d.name]
           return `<b>${d.name}</b><br/>涨幅 ${d.value[0].toFixed(2)}% · 强度 ${d.value[1].toFixed(0)}<br/>${cycle ? `${cycle.icon} ${cycle.phase} · 活跃${cycle.appearance_days}日` : ''}`
@@ -144,7 +144,7 @@ function ThemeHeatBubble({ sectors, cycles, onSelect }: {
         emphasis: { itemStyle: { borderWidth: 2, borderColor: '#333' } },
       }],
     })
-    chart.on('click', (p: any) => { if (p.data?.name) onSelect(p.data.name) })
+    chart.on('click', (p: AnyData) => { if (p.data?.name) onSelect(p.data.name) })
     const onResize = () => chart.resize()
     window.addEventListener('resize', onResize)
     return () => { window.removeEventListener('resize', onResize); chart.dispose() }
@@ -214,19 +214,19 @@ function ThemeRankList({ sectors, cycles, selected, onSelect }: {
 function ThemeDetailPanel({ name, cycles }: { name: string; cycles: Record<string, CycleItem> }) {
   const [stocks, setStocks] = useState<DetailStock[]>([])
   const [loading, setLoading] = useState(false)
-  const [cycle, setCycle] = useState<any>(null)
+  const [cycle, setCycle] = useState<AnyData>(null)
   const cycle0 = cycles[name]
 
   useEffect(() => {
     if (!name) return
     setLoading(true)
     setStocks([])
-    fetchApi<any>(`/theme/cycle/${encodeURIComponent(name)}?days=10`)
+    fetchApi<AnyData>(`/theme/cycle/${encodeURIComponent(name)}?days=10`)
       .then(r => setCycle(r))
       .catch(() => setCycle(null))
     fetchApi<{ data: DetailStock[] }>(`/theme/sectors`)
       .then(res => {
-        const sec = (res.data || []).find((s: any) =>
+        const sec = (res.data || []).find((s: AnyData) =>
           pick(s as Sector) === name
         )
         if (sec) {
@@ -374,6 +374,7 @@ export default function ThemeWorkshopPage() {
       message.error(msg)
     })
       .finally(() => setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSelect = useCallback((name: string) => setSelected(name), [])
@@ -471,6 +472,7 @@ export default function ThemeWorkshopPage() {
 }
 
 import { lazy, Suspense } from 'react'
+import type { AnyData } from '../api/types'
 const HotEventsPageLazy = lazy(() => import('./HotEventsPage'))
 const RotationPageLazy = lazy(() => import('./RotationPage'))
 const ProsperityPageLazy = lazy(() => import('./ProsperityPage'))

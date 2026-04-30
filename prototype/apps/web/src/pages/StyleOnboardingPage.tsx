@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Card, Radio, Button, Space, Typography, message, Steps, Tag, Alert } from 'antd'
 import { fetchApi, postApi } from '../api/client'
 import { setUser, getUser } from '../api/auth'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
 
@@ -28,7 +29,7 @@ export default function StyleOnboardingPage() {
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    fetchApi<{ questions: Question[] }>('/style/questions').then((r) => setQuestions(r.questions))
+    void fetchApi<{ questions: Question[] }>('/style/questions').then((r) => setQuestions(r.questions))
   }, [])
 
   if (questions.length === 0) return <Card loading />
@@ -43,10 +44,10 @@ export default function StyleOnboardingPage() {
       const r = await postApi<{ style: string }>('/style/submit', { answers })
       setResult(r.style)
       const u = getUser()
-      if (u) setUser({ ...u, style: r.style as any })
+      if (u) setUser({ ...u, style: r.style as AnyData })
       message.success(`识别为：${STYLE_LABEL[r.style] || r.style}`)
-    } catch (e: any) {
-      message.error(e.message || '提交失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '提交失败')
     } finally {
       setSubmitting(false)
     }

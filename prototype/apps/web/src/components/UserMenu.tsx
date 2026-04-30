@@ -35,7 +35,7 @@ export default function UserMenu() {
           { key: 'onboarding', icon: <BulbOutlined />, label: '风格测试', onClick: () => navigate('/onboarding') },
           { key: 'settings', icon: <SettingOutlined />, label: '我的埋点', onClick: () => navigate('/settings') },
           { type: 'divider' },
-          { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => { clearAuth(); navigate('/login') } },
+          { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', onClick: () => { clearAuth(); void navigate('/login') } },
         ],
       }}
     >

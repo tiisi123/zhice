@@ -10,6 +10,7 @@ import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
+import type { AnyData } from '../api/types'
 
 const ValuePage = lazy(() => import('./ValuePage'))
 const ValuationPage = lazy(() => import('./ValuationPage'))
@@ -29,12 +30,12 @@ const DEFAULT_VALUE_STOCKS = [
 // ========== 公司质量雷达图 ==========
 function QualityRadar({ code }: { code: string }) {
   const ref = useRef<HTMLDivElement>(null)
-  const [data, setData] = useState<any>(null)
-  const [status, setStatus] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
+  const [status, setStatus] = useState<AnyData>(null)
 
   useEffect(() => {
     if (!code) return
-    fetchApi<any>(`/value/financial/${code}`)
+    fetchApi<AnyData>(`/value/financial/${code}`)
       .then((r) => {
         setData(r.data || null)
         setStatus({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message })
@@ -97,12 +98,12 @@ function QualityRadar({ code }: { code: string }) {
 
 // ========== 估值分位简版 ==========
 function ValuationBrief({ code }: { code: string }) {
-  const [data, setData] = useState<any>(null)
-  const [status, setStatus] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
+  const [status, setStatus] = useState<AnyData>(null)
 
   useEffect(() => {
     if (!code) return
-    fetchApi<any>(`/value/financial/${code}`)
+    fetchApi<AnyData>(`/value/financial/${code}`)
       .then((r) => {
         setData(r.data || null)
         setStatus({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message })

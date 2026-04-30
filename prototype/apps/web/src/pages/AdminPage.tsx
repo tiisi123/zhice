@@ -33,15 +33,16 @@ export default function AdminPage() {
     try {
       const r = await fetchApi<{ codes: InviteCode[] }>('/payment/admin/codes')
       setCodes(r.codes)
-    } catch (e: any) {
-      message.error(e?.message || '加载失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '加载失败')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    if (isAdmin) loadCodes()
+    if (isAdmin) void loadCodes()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const generate = async () => {
@@ -51,9 +52,9 @@ export default function AdminPage() {
         plan, days, count, max_uses: 1,
       })
       message.success(`已生成 ${r.codes.length} 个邀请码`)
-      loadCodes()
-    } catch (e: any) {
-      message.error(e?.message || '生成失败')
+      void loadCodes()
+    } catch (e) {
+      message.error((e as Error)?.message || '生成失败')
     } finally {
       setGenerating(false)
     }
@@ -63,7 +64,7 @@ export default function AdminPage() {
     const unused = codes.filter(c => c.used_count < c.max_uses)
     if (!unused.length) { message.warning('没有可用的邀请码'); return }
     const text = unused.map(c => `${c.code}  (${c.plan} ${c.days}天)`).join('\n')
-    navigator.clipboard.writeText(text)
+    void navigator.clipboard.writeText(text)
     message.success(`已复制 ${unused.length} 个未使用邀请码`)
   }
 
@@ -113,7 +114,7 @@ export default function AdminPage() {
                 <Space>
                   <code style={{ fontSize: 13 }}>{v}</code>
                   <CopyOutlined style={{ cursor: 'pointer', color: '#1677ff' }}
-                    onClick={() => { navigator.clipboard.writeText(v); message.success('已复制') }} />
+                    onClick={() => { void navigator.clipboard.writeText(v); message.success('已复制') }} />
                 </Space>
               ),
             },

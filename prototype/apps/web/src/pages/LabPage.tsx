@@ -5,6 +5,7 @@ import {
 import { DeleteOutlined, EditOutlined, PlusOutlined, ExperimentOutlined, BellOutlined } from '@ant-design/icons'
 import { fetchApi, postApi, deleteApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
 
@@ -12,11 +13,11 @@ const { Title, Paragraph } = Typography
 function CompareTab() {
   const [templates, setTemplates] = useState<string[]>([])
   const [selected, setSelected] = useState<string[]>([])
-  const [results, setResults] = useState<any | null>(null)
+  const [results, setResults] = useState<AnyData | null>(null)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    fetchApi<{ templates: Record<string, any> }>('/strategy/templates')
+    void fetchApi<{ templates: Record<string, unknown> }>('/strategy/templates')
       .then((r) => setTemplates(Object.keys(r.templates)))
   }, [])
 
@@ -24,10 +25,10 @@ function CompareTab() {
     if (selected.length < 2) { message.warning('至少选 2 个策略'); return }
     setLoading(true)
     try {
-      const r = await postApi<any>('/lab/compare', { templates: selected, years: 3 })
+      const r = await postApi<AnyData>('/lab/compare', { templates: selected, years: 3 })
       setResults(r)
-    } catch (e: any) {
-      message.error(e.message || '对比失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '对比失败')
     } finally { setLoading(false) }
   }
 
@@ -88,13 +89,13 @@ function AlertRulesTab() {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<Rule | null>(null)
   const [form] = Form.useForm()
-  const [evalResult, setEvalResult] = useState<any | null>(null)
+  const [evalResult, setEvalResult] = useState<AnyData | null>(null)
 
   const load = async () => {
     const r = await fetchApi<{ items: Rule[] }>('/lab/alert-rules')
     setRules(r.items)
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   const save = async () => {
     const v = await form.validateFields()
@@ -114,16 +115,16 @@ function AlertRulesTab() {
     setOpen(false)
     setEditing(null)
     form.resetFields()
-    load()
+    void load()
   }
 
   const remove = async (id: number) => {
     await deleteApi(`/lab/alert-rules/${id}`)
-    load()
+    void load()
   }
 
   const evaluate = async (id: number) => {
-    const r = await postApi<any>(`/lab/alert-rules/${id}/evaluate`)
+    const r = await postApi<AnyData>(`/lab/alert-rules/${id}/evaluate`)
     setEvalResult(r)
   }
 
@@ -175,7 +176,7 @@ function AlertRulesTab() {
         <Card title={`命中结果（${evalResult.match_count}/${evalResult.total}）`} size="small" style={{ marginTop: 12 }}
           extra={<Button size="small" onClick={() => setEvalResult(null)}>关闭</Button>}>
           <Table
-            rowKey={(r: any) => r.stock_code || r.code} size="small" pagination={{ pageSize: 10 }}
+            rowKey={(r: AnyData) => r.stock_code || r.code} size="small" pagination={{ pageSize: 10 }}
             dataSource={evalResult.matches}
             columns={[
               { title: '代码', dataIndex: 'stock_code', width: 100 },
@@ -238,11 +239,11 @@ function StyleComboTab() {
     const r = await fetchApi<{ styles: string[] }>('/lab/style-combo')
     setStyles(r.styles)
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load() }, [])
 
   const save = async () => {
     if (styles.length === 0) { message.warning('至少选择一个风格'); return }
-    const r = await postApi<any>('/lab/style-combo', { styles })
+    const r = await postApi<AnyData>('/lab/style-combo', { styles })
     message.success(`已保存，主风格：${STYLE_LABEL[r.primary]}`)
   }
 
@@ -253,7 +254,7 @@ function StyleComboTab() {
   }
 
   const applyDetected = async () => {
-    const r = await postApi<any>('/lab/style-learn/apply')
+    const r = await postApi<AnyData>('/lab/style-learn/apply')
     if (!r.applied) { message.info(r.reason || '无法识别'); return }
     message.success(`已应用识别结果：${STYLE_LABEL[r.style]}`)
   }

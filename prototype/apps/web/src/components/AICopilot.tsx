@@ -4,6 +4,7 @@ import { RobotOutlined, SendOutlined, SaveOutlined, BulbOutlined, ClearOutlined,
 import Markdown from 'react-markdown'
 import { fetchApi, postApi } from '../api/client'
 import Disclaimer from './Disclaimer'
+import type { AnyData } from '../api/types'
 
 const { TextArea } = Input
 
@@ -75,7 +76,7 @@ interface CopilotProps {
 export default function AICopilot({ open, onClose, currentPage = '' }: CopilotProps) {
   const [activeTab, setActiveTab] = useState('report')
   const [report, setReport] = useState<string | null>(null)
-  const [reportSummary, setReportSummary] = useState<any>(null)
+  const [reportSummary, setReportSummary] = useState<AnyData>(null)
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string }>>([])
   const [loading, setLoading] = useState(false)
@@ -98,7 +99,7 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
   const generateReport = async () => {
     setLoading(true)
     try {
-      const res = await fetchApi<{ report: string; summary: any; trade_date: string }>('/ai/replay-report')
+      const res = await fetchApi<{ report: string; summary: AnyData; trade_date: string }>('/ai/replay-report')
       setReport(res.report)
       setReportSummary(res.summary)
     } catch {
@@ -156,7 +157,7 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
               生成今日复盘报告
             </Button>
             {report && <Button onClick={saveReport} icon={<SaveOutlined />}>保存</Button>}
-            {report && <Button onClick={() => { navigator.clipboard.writeText(report); message.success('已复制到剪贴板') }} icon={<CopyOutlined />}>复制</Button>}
+            {report && <Button onClick={() => { void navigator.clipboard.writeText(report); message.success('已复制到剪贴板') }} icon={<CopyOutlined />}>复制</Button>}
           </div>
           {report && (
             <Card size="small" style={{ maxHeight: 500, overflow: 'auto' }}>
@@ -182,7 +183,7 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
                     key={i}
                     color="blue"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => { setActiveTab('chat'); sendChat(p) }}
+                    onClick={() => { setActiveTab('chat'); void sendChat(p) }}
                   >
                     {p}
                   </Tag>
@@ -214,7 +215,7 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
             <TextArea
               value={chatInput}
               onChange={e => setChatInput(e.target.value)}
-              onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); sendChat() } }}
+              onPressEnter={e => { if (!e.shiftKey) { e.preventDefault(); void sendChat() } }}
               placeholder="问我任何关于市场的问题..."
               autoSize={{ minRows: 1, maxRows: 3 }}
               style={{ flex: 1 }}

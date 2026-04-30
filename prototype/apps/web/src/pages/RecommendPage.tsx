@@ -25,7 +25,7 @@ interface Rec {
   affinity: number
   risk_level: '保守' | '平衡' | '进取'
   reasons: string[]
-  dsl: Record<string, any>
+  dsl: Record<string, unknown>
 }
 
 interface RecommendResp {
@@ -58,7 +58,7 @@ export default function RecommendPage() {
 
   useEffect(() => {
     setLoading(true)
-    fetchApi<RecommendResp>('/recommend/strategies').then(setData).finally(() => setLoading(false))
+    void fetchApi<RecommendResp>('/recommend/strategies').then(setData).finally(() => setLoading(false))
   }, [])
 
   const openExplain = async (r: Rec) => {
@@ -69,8 +69,8 @@ export default function RecommendPage() {
     try {
       const resp = await fetchApi<{ explanation: string }>(`/recommend/explain/${r.id}`)
       setExplainText(resp.explanation || '')
-    } catch (e: any) {
-      setExplainText(`AI 解读失败：${e?.message || '未知错误'}`)
+    } catch (e) {
+      setExplainText(`AI 解读失败：${(e as Error)?.message || '未知错误'}`)
     } finally {
       setExplainLoading(false)
     }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Card, Col, Row, Select, Spin, Statistic, Table, Tabs, Tag } from 'antd'
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
+import type { AnyData } from '../api/types'
 
 type StageType = '加速' | '启动' | '蓄势' | '分歧' | '退潮'
 
@@ -118,7 +119,7 @@ function toDagLinks(rawLinks: SankeyLink[]): SankeyLink[] {
 const tableColumns = [
   {
     title: 'ETF', key: 'name', width: 160,
-    render: (_: any, r: EtfMetric) => (
+    render: (_: AnyData, r: EtfMetric) => (
       <div>
         <div style={{ fontWeight: 600 }}>{r.name}</div>
         <div style={{ color: '#999', fontSize: 12 }}>{r.code} · {r.theme}</div>
@@ -194,7 +195,7 @@ export default function EtfRotationPage() {
     chart.setOption({
       tooltip: {
         trigger: 'item',
-        formatter: (p: any) => {
+        formatter: (p: AnyData) => {
           if (p.dataType === 'edge') {
             const d = p.data
             return `${d.source} → ${d.target}<br/>强度: ${d.value}<br/>概率: ${d.probability}%<br/>滞后: ${d.lag_days}天`
@@ -229,7 +230,7 @@ export default function EtfRotationPage() {
 
     chart.setOption({
       tooltip: {
-        formatter: (p: any) => {
+        formatter: (p: AnyData) => {
           const [xi, yi, score] = p.value
           return `${heatRows[yi].name}<br/>${dashboard.heatmap.dates[xi]}<br/>启动分: ${score}`
         },

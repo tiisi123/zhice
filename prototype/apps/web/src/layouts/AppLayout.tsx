@@ -138,7 +138,7 @@ export default function AppLayout() {
           mode="inline"
           selectedKeys={selectedKeys}
           items={menuItems}
-          onClick={({ key }) => { navigate(key); if (isMobile) setCollapsed(true) }}
+          onClick={({ key }) => { void navigate(key); if (isMobile) setCollapsed(true) }}
           style={{ borderRight: 'none' }}
         />
       </Sider>

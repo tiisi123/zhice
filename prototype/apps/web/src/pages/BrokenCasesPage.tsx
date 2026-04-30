@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import MockBanner from '../components/MockBanner'
+import type { AnyData } from '../api/types'
 
 const REASON_THEME: Record<string, { color: string; tagColor: string; icon: string }> = {
   '抛压': { color: '#cf1322', tagColor: 'red', icon: '📉' },
@@ -22,7 +23,7 @@ function safeNum(v: unknown, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
-function normalizeCase(item: any) {
+function normalizeCase(item: AnyData) {
   return {
     ...item,
     stock_code: item.stock_code ?? item.SecurityCode,
@@ -33,9 +34,9 @@ function normalizeCase(item: any) {
   }
 }
 
-function normalizeBrokenData(payload: any) {
+function normalizeBrokenData(payload: AnyData) {
   const byReason = payload?.by_reason || {}
-  const nextByReason = Object.fromEntries(Object.entries(byReason).map(([reason, value]: [string, any]) => [
+  const nextByReason = Object.fromEntries(Object.entries(byReason).map(([reason, value]: [string, AnyData]) => [
     reason,
     {
       ...value,
@@ -64,7 +65,7 @@ function PieChart({ byReason }: { byReason: Record<string, { count: number }> })
   return <div ref={ref} style={{ width: '100%', height: 220 }} />
 }
 
-function ReasonCards({ byReason }: { byReason: Record<string, { count: number; cases: any[] }> }) {
+function ReasonCards({ byReason }: { byReason: Record<string, { count: number; cases: AnyData[] }> }) {
   const entries = Object.entries(byReason).sort(([, a], [, b]) => b.count - a.count)
   return (
     <Row gutter={[12, 12]}>
@@ -94,7 +95,7 @@ function ReasonCards({ byReason }: { byReason: Record<string, { count: number; c
 }
 
 export default function BrokenCasesPage() {
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<AnyData>(null)
   const [loading, setLoading] = useState(true)
   const [recs, setRecs] = useState<string[]>([])
   const [filterReason, setFilterReason] = useState<string>('all')
@@ -103,7 +104,7 @@ export default function BrokenCasesPage() {
   const [meta, setMeta] = useState<{ source?: string; data_status?: string; mock?: boolean; message?: string }>({})
 
   useEffect(() => {
-    fetchApi<any>('/analysis/broken-cases')
+    fetchApi<AnyData>('/analysis/broken-cases')
       .then(d => {
         setData(normalizeBrokenData(d))
         setIsMock(!!d.mock)
@@ -121,7 +122,7 @@ export default function BrokenCasesPage() {
     if (!data) return
     const total = data.total || 0
     const sentiment = total > 20 ? '高潮' : total > 10 ? '回暖' : total > 5 ? '中性' : '低迷'
-    const maxBoard = Math.max(0, ...Object.values(data.by_reason || {}).flatMap((r: any) => (r.cases || []).map((c: any) => c.board_count || 0)))
+    const maxBoard = Math.max(0, ...Object.values(data.by_reason || {}).flatMap((r: AnyData) => (r.cases || []).map((c: AnyData) => c.board_count || 0)))
     fetchApi<{ recommendations: string[] }>(`/analysis/strategy-recommend?sentiment=${sentiment}&max_board=${maxBoard}`)
       .then(res => setRecs(res.recommendations || []))
       .catch(() => {})
@@ -130,13 +131,13 @@ export default function BrokenCasesPage() {
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />
 
   const byReason = data?.by_reason || {}
-  const allCases: any[] = Object.values(byReason).flatMap((r: any) => r.cases || [])
+  const allCases: AnyData[] = Object.values(byReason).flatMap((r: AnyData) => r.cases || [])
   const filteredCases = filterReason === 'all' ? allCases : (byReason[filterReason]?.cases || [])
   const isEmpty = !err && allCases.length === 0
 
   const columns = [
     { title: '代码', dataIndex: 'stock_code', key: 'stock_code', width: 75, render: (v: string) => <Link to={`/stock/${v}`}>{v}</Link> },
-    { title: '名称', dataIndex: 'stock_name', key: 'stock_name', width: 80, render: (v: string, r: any) => <Link to={`/stock/${r.stock_code}`} style={{ fontWeight: r.board_count >= 2 ? 700 : 400 }}>{v}</Link> },
+    { title: '名称', dataIndex: 'stock_name', key: 'stock_name', width: 80, render: (v: string, r: AnyData) => <Link to={`/stock/${r.stock_code}`} style={{ fontWeight: r.board_count >= 2 ? 700 : 400 }}>{v}</Link> },
     { title: '连板', dataIndex: 'board_count', key: 'b', width: 50, render: (v: number) => v >= 2 ? <Tag color="red">{v}板</Tag> : <span>{v || 1}</span> },
     { title: '涨幅', dataIndex: 'change_rate', key: 'ch', width: 65, render: (v: number) => {
       const n = safeNum(v)
@@ -199,7 +200,7 @@ export default function BrokenCasesPage() {
       <Card size="small" title={<span><RobotOutlined style={{ color: '#1677ff' }} /> 向 AI 追问</span>}>
         <Space wrap>
           <Button type="primary" icon={<RobotOutlined />}
-            onClick={() => { const topReason = Object.entries(byReason).sort(([, a]: any, [, b]: any) => b.count - a.count)[0]; askAI(`今日炸板 ${data?.total || 0} 只，最多的原因是【${topReason?.[0] || '未知'}】(${(topReason?.[1] as any)?.count || 0}只)。分析炸板集中原因、对市场情绪的影响，以及明日操作策略。`) }}
+            onClick={() => { const topReason = Object.entries(byReason).sort(([, a]: AnyData, [, b]: AnyData) => b.count - a.count)[0]; askAI(`今日炸板 ${data?.total || 0} 只，最多的原因是【${topReason?.[0] || '未知'}】(${(topReason?.[1] as AnyData)?.count || 0}只)。分析炸板集中原因、对市场情绪的影响，以及明日操作策略。`) }}
           >
             炸板深度分析
           </Button>

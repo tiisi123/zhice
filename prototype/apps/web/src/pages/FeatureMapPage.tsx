@@ -8,6 +8,7 @@ import { Card, Typography, Select, Switch, Tag, Space, Empty, Button, Input, mes
 import { ReloadOutlined, LinkOutlined, ExpandOutlined, CameraOutlined, DownloadOutlined, FileZipOutlined } from '@ant-design/icons'
 import html2canvas from 'html2canvas'
 import JSZip from 'jszip'
+import type { AnyData } from '../api/types'
 
 const { Title, Paragraph, Text } = Typography
 
@@ -290,15 +291,15 @@ export default function FeatureMapPage() {
     const iframe = iframeRef.current
     if (!iframe) return
     let win: Window | null = null
-    try { win = iframe.contentWindow } catch {}
+    try { win = iframe.contentWindow } catch { /* cross-origin iframe — fall through to !win check */ }
     if (!win) return
     const onScroll = () => recompute()
     win.addEventListener('scroll', onScroll, true)
     win.addEventListener('resize', onScroll)
     const t = setInterval(recompute, 1500) // 兜底：动态内容重算
     return () => {
-      try { win?.removeEventListener('scroll', onScroll, true) } catch {}
-      try { win?.removeEventListener('resize', onScroll) } catch {}
+      try { win?.removeEventListener('scroll', onScroll, true) } catch { /* iframe gone */ }
+      try { win?.removeEventListener('resize', onScroll) } catch { /* iframe gone */ }
       clearInterval(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -392,7 +393,7 @@ export default function FeatureMapPage() {
     if (!iframe) return null
     let doc: Document | null = null
     let win: Window | null = null
-    try { doc = iframe.contentDocument; win = iframe.contentWindow } catch {}
+    try { doc = iframe.contentDocument; win = iframe.contentWindow } catch { /* cross-origin iframe — handled below */ }
     if (!doc || !win) { message.error('iframe 不可访问'); return null }
 
     const isFull = mode === 'full'
@@ -418,7 +419,7 @@ export default function FeatureMapPage() {
         ...win,
         scrollX: 0, scrollY: 0,
         innerWidth: win.innerWidth, innerHeight: win.innerHeight,
-      } as any)
+      } as AnyData)
       drawAnnotations(ctx, pageMap.boxes, doc, offsetWin, isFull)
       ctx.restore()
     }
@@ -446,9 +447,9 @@ export default function FeatureMapPage() {
     try {
       await exportPngFor(current, mode)
       message.success('已导出 PNG')
-    } catch (e: any) {
+    } catch (e) {
       console.error(e)
-      message.error('导出失败：' + (e?.message || '未知错误'))
+      message.error('导出失败：' + ((e as Error)?.message || '未知错误'))
     } finally {
       hide()
       setExporting(false)
@@ -527,7 +528,7 @@ export default function FeatureMapPage() {
       try {
         const el = iframe.contentDocument?.querySelector(b.selector) as HTMLElement | null
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      } catch {}
+      } catch { /* selector failed — ignore */ }
     }
     setTimeout(() => setFlashIdx(null), 1800)
   }
@@ -600,7 +601,7 @@ export default function FeatureMapPage() {
           <div style={{ marginTop: 12, fontSize: 12, color: '#666' }}>
             {current.desc && <Paragraph type="secondary" style={{ fontSize: 11, marginBottom: 8 }}>{current.desc}</Paragraph>}
             <div style={{ fontWeight: 600, marginBottom: 6 }}>
-              {current.title}　共 {filteredBoxes.length} / {current.boxes.length} 项标注
+              {current.title} 共 {filteredBoxes.length} / {current.boxes.length} 项标注
             </div>
             {filteredBoxes.map((b, i) => {
               const live = liveBoxes[i]

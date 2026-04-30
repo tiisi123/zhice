@@ -48,7 +48,7 @@ export function useHotkeys() {
       const route = HOTKEY_MAP[e.key]
       if (route) {
         e.preventDefault()
-        navigate(route.path)
+        void navigate(route.path)
         message.success(`快捷键 ${e.key} → ${route.label}`, 1)
         return
       }

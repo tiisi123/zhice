@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import type { LimitUpStock } from './types'
+import type { LimitUpStock, AnyData } from './types'
 
 interface MarketWSData {
   limitUp: LimitUpStock[]
   broken: LimitUpStock[]
-  hot: any[]
-  anomaly: any[]
+  hot: AnyData[]
+  anomaly: AnyData[]
   connected: boolean
 }
 
@@ -23,27 +23,30 @@ function payloadData<T>(value: unknown): T[] {
   return Array.isArray(data) ? data as T[] : []
 }
 
-function toNumber(value: unknown, fallback = 0) {
+function toNumber(value: unknown, fallback: unknown = 0): number {
   const n = Number(value)
-  return Number.isFinite(n) ? n : fallback
+  if (Number.isFinite(n)) return n
+  const f = Number(fallback)
+  return Number.isFinite(f) ? f : 0
 }
 
-function normalizeMarketItem<T extends Record<string, any>>(item: T): T {
+function normalizeMarketItem<T>(item: T): T {
+  const it = item as AnyData
   return {
-    ...item,
-    stock_code: item.stock_code ?? item.SecurityCode,
-    stock_name: item.stock_name ?? item.SecurityName,
-    first_plate_name: item.first_plate_name ?? item.PlateName ?? item.plate_name ?? item.concept_name,
-    change_rate: toNumber(item.change_rate ?? item.ChangePercent, item.change_rate),
-    board_count: toNumber(item.board_count, item.board_count),
-  }
+    ...it,
+    stock_code: it.stock_code ?? it.SecurityCode,
+    stock_name: it.stock_name ?? it.SecurityName,
+    first_plate_name: it.first_plate_name ?? it.PlateName ?? it.plate_name ?? it.concept_name,
+    change_rate: toNumber(it.change_rate ?? it.ChangePercent, it.change_rate),
+    board_count: toNumber(it.board_count, it.board_count),
+  } as T
 }
 
 export function useMarketWS(enabled: boolean): MarketWSData {
   const [limitUp, setLimitUp] = useState<LimitUpStock[]>([])
   const [broken, setBroken] = useState<LimitUpStock[]>([])
-  const [hot, setHot] = useState<any[]>([])
-  const [anomaly, setAnomaly] = useState<any[]>([])
+  const [hot, setHot] = useState<AnyData[]>([])
+  const [anomaly, setAnomaly] = useState<AnyData[]>([])
   const [connected, setConnected] = useState(false)
 
   const wsRef = useRef<WebSocket | null>(null)
@@ -87,8 +90,8 @@ export function useMarketWS(enabled: boolean): MarketWSData {
           const d = msg.data
           if (d.limit_up) setLimitUp(payloadData<LimitUpStock>(d.limit_up).map(normalizeMarketItem))
           if (d.broken) setBroken(payloadData<LimitUpStock>(d.broken).map(normalizeMarketItem))
-          if (d.hot) setHot(payloadData<any>(d.hot).map(normalizeMarketItem))
-          if (d.anomaly) setAnomaly(payloadData<any>(d.anomaly).map(normalizeMarketItem))
+          if (d.hot) setHot(payloadData<AnyData>(d.hot).map(normalizeMarketItem))
+          if (d.anomaly) setAnomaly(payloadData<AnyData>(d.anomaly).map(normalizeMarketItem))
         }
       } catch {
         // ignore malformed messages

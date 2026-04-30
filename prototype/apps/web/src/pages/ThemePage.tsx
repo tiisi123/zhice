@@ -7,6 +7,7 @@ import type { Dayjs } from 'dayjs'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import MockBanner from '../components/MockBanner'
+import type { AnyData } from '../api/types'
 
 interface SectorItem {
   PlateID?: string; plate_id?: string; PlateName?: string; plate_name?: string
@@ -85,7 +86,7 @@ function TreemapChart({ sectors, onSelect }: { sectors: SectorItem[]; onSelect: 
       return { name, value: Math.max(zt, 1), change, _raw: s }
     })
     chart.setOption({
-      tooltip: { formatter: (p: any) => `${p.name}<br/>涨停 ${p.value} 只<br/>涨幅 ${p.data.change?.toFixed(2) || 0}%` },
+      tooltip: { formatter: (p: AnyData) => `${p.name}<br/>涨停 ${p.value} 只<br/>涨幅 ${p.data.change?.toFixed(2) || 0}%` },
       series: [{
         type: 'treemap', roam: false, nodeClick: false,
         breadcrumb: { show: false },
@@ -100,7 +101,7 @@ function TreemapChart({ sectors, onSelect }: { sectors: SectorItem[]; onSelect: 
         })),
       }],
     })
-    chart.on('click', (p: any) => {
+    chart.on('click', (p: AnyData) => {
       const raw = treeData[p.dataIndex]?._raw
       if (raw) onSelect(raw)
     })
@@ -115,10 +116,10 @@ function TreemapChart({ sectors, onSelect }: { sectors: SectorItem[]; onSelect: 
 function DetailPanel({ sector, detail, loading }: { sector: SectorItem; detail: DetailStock[]; loading: boolean }) {
   const name = pickStr(sector, 'PlateName', 'plate_name')
   const cols = [
-    { title: '代码', key: 'c', width: 80, render: (_: any, r: DetailStock) => <Link to={`/stock/${(r.SecurityCode || r.stock_code || '').slice(0, 6)}`}>{r.SecurityCode || r.stock_code}</Link> },
-    { title: '名称', key: 'n', width: 80, render: (_: any, r: DetailStock) => <span style={{ fontWeight: (r.board_count || 0) >= 2 ? 700 : 400 }}>{r.SecurityName || r.stock_name}</span> },
-    { title: '涨幅', key: 'ch', width: 70, render: (_: any, r: DetailStock) => { const v = Number(r.ChangePercent || r.change_percent || 0); return <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>{v.toFixed(2)}%</span> } },
-    { title: '连板', key: 'b', width: 55, render: (_: any, r: DetailStock) => (r.board_count || 0) >= 1 ? <Tag color="red">{r.board_count}板</Tag> : <span style={{ color: '#999' }}>—</span> },
+    { title: '代码', key: 'c', width: 80, render: (_: AnyData, r: DetailStock) => <Link to={`/stock/${(r.SecurityCode || r.stock_code || '').slice(0, 6)}`}>{r.SecurityCode || r.stock_code}</Link> },
+    { title: '名称', key: 'n', width: 80, render: (_: AnyData, r: DetailStock) => <span style={{ fontWeight: (r.board_count || 0) >= 2 ? 700 : 400 }}>{r.SecurityName || r.stock_name}</span> },
+    { title: '涨幅', key: 'ch', width: 70, render: (_: AnyData, r: DetailStock) => { const v = Number(r.ChangePercent || r.change_percent || 0); return <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>{v.toFixed(2)}%</span> } },
+    { title: '连板', key: 'b', width: 55, render: (_: AnyData, r: DetailStock) => (r.board_count || 0) >= 1 ? <Tag color="red">{r.board_count}板</Tag> : <span style={{ color: '#999' }}>—</span> },
   ]
 
   return (
@@ -154,7 +155,7 @@ export default function ThemePage() {
     const params = selectedDate ? `?date=${selectedDate}` : ''
     fetchApi<{ data: SectorItem[]; mock?: boolean }>(`/theme/sectors${params}`)
       .then(res => { setSectors(res.data || []); setIsMock(!!res.mock) })
-      .catch(e => message.error(e.message || '获取板块失败'))
+      .catch(e => message.error((e as Error)?.message || '获取板块失败'))
       .finally(() => setLoading(false))
   }, [selectedDate])
 

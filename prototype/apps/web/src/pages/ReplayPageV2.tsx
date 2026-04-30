@@ -11,7 +11,7 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
-import type { MarketSummary, LadderData, LimitUpStock } from '../api/types'
+import type { MarketSummary, LadderData, LimitUpStock, AnyData } from '../api/types'
 import {
   AIInlineSummary, ContradictionAlert, DeltaIndicator,
   ProgressiveFold, AskAIChip, SectionHeader,
@@ -61,7 +61,7 @@ function deltaTag(curr: number, prev: number | undefined, opts?: { invert?: bool
   return <DeltaIndicator current={curr} prev={prev} invert={opts?.invert} suffix={opts?.suffix} precision={opts?.precision} />
 }
 
-function metaOf(name: string, resp: any): ApiMeta {
+function metaOf(name: string, resp: AnyData): ApiMeta {
   return { name, source: resp?.source, data_status: resp?.data_status, mock: resp?.mock, message: resp?.message }
 }
 
@@ -339,7 +339,7 @@ function SentimentMiniChart() {
       grid: { left: 36, right: 12, top: 8, bottom: 24 },
       tooltip: {
         trigger: 'axis',
-        formatter: (ps: any) => {
+        formatter: (ps: AnyData) => {
           const p = ps[0]; const d = data[p.dataIndex]
           return `${d.date}<br/>涨停 ${d.limit_up ?? '—'} · 情绪 ${d.sentiment ?? '—'}`
         },
@@ -564,7 +564,7 @@ function RotationScatter({ sectors }: { sectors: SectorRaw[] }) {
   useEffect(() => {
     if (window_ === 1) { setMultiDay(null); return }
     setLoading(true)
-    fetchApi<{ data: any[] }>(`/market/rotation?window=${window_}`)
+    fetchApi<{ data: AnyData[] }>(`/market/rotation?window=${window_}`)
       .then(r => setMultiDay(r.data || []))
       .catch(() => setMultiDay([]))
       .finally(() => setLoading(false))
@@ -584,7 +584,7 @@ function RotationScatter({ sectors }: { sectors: SectorRaw[] }) {
     const chart = echarts.init(ref.current)
     chart.setOption({
       tooltip: {
-        formatter: (p: any) => {
+        formatter: (p: AnyData) => {
           const d = p.data
           return `${d[3]}<br/>涨幅: ${d[0].toFixed(2)}%<br/>主力: ${(d[1] / 1e8).toFixed(2)}亿<br/>强度: ${d[2]}`
         },
@@ -605,11 +605,11 @@ function RotationScatter({ sectors }: { sectors: SectorRaw[] }) {
         symbolSize: (d: number[]) => Math.min(Math.max(d[2] / 2, 8), 28),
         data: points.map(p => [p.change, p.net_flow, p.intensity, p.name]),
         itemStyle: {
-          color: (p: any) => p.data[0] >= 0 ? '#f5222d' : '#52c41a', opacity: 0.7,
+          color: (p: AnyData) => p.data[0] >= 0 ? '#f5222d' : '#52c41a', opacity: 0.7,
         },
         label: {
           show: true, position: 'right', fontSize: 10, color: '#666',
-          formatter: (p: any) => p.data[3],
+          formatter: (p: AnyData) => p.data[3],
         },
       }],
     })
@@ -646,7 +646,7 @@ function LadderPyramid({ tiers }: { tiers: { n: number; stocks: LimitUpStock[] }
     chart.setOption({
       tooltip: {
         trigger: 'axis', axisPointer: { type: 'shadow' },
-        formatter: (p: any) => {
+        formatter: (p: AnyData) => {
           const d = p[0]
           const tier = highTiers[d.dataIndex]
           if (!tier) return ''
@@ -675,7 +675,7 @@ function LadderPyramid({ tiers }: { tiers: { n: number; stocks: LimitUpStock[] }
         barMaxWidth: 28,
         label: {
           show: true, position: 'right', fontSize: 12, fontWeight: 600,
-          formatter: (p: any) => {
+          formatter: (p: AnyData) => {
             const tier = highTiers[p.dataIndex]
             const leader = tier?.stocks.find((s: LimitUpStock) => s.is_leader) || tier?.stocks[0]
             return leader ? `${p.value}只  ${leader.stock_name}` : `${p.value}只`
@@ -867,7 +867,7 @@ function SectionCapitalFlow({ data, date }: { data: CapitalItem[] | null; date: 
     chart.setOption({
       tooltip: {
         trigger: 'axis',
-        formatter: (params: any) => {
+        formatter: (params: AnyData) => {
           const p = params[0]
           const item = top[p.dataIndex]
           const netStr = Math.abs(item.net_flow) >= 1e8
@@ -883,7 +883,7 @@ function SectionCapitalFlow({ data, date }: { data: CapitalItem[] | null; date: 
         type: 'bar',
         data: top.map(d => d.net_flow).reverse(),
         itemStyle: {
-          color: (params: any) => params.value >= 0 ? '#f5222d' : '#52c41a',
+          color: (params: AnyData) => params.value >= 0 ? '#f5222d' : '#52c41a',
         },
         barWidth: 16,
       }],
@@ -1060,7 +1060,7 @@ function SectionTomorrow({ summary, ladder: _ladder, sectors, date }: {
 
 // ========== Section 新增：今日结论条 ==========
 function SectionConclusionBar({ summary, sectors, phase }: {
-  summary: MarketSummary; sectors: SectorRaw[]; phase: any
+  summary: MarketSummary; sectors: SectorRaw[]; phase: AnyData
 }) {
   const sent = summary.sentiment_level || '中性'
   const theme = SENT_THEME[sent] || SENT_THEME['中性']
@@ -1113,7 +1113,7 @@ function SectionConclusionBar({ summary, sectors, phase }: {
 }
 
 // ========== Section 新增：情绪周期相位 ==========
-function SectionSentimentPhase({ phase }: { phase: any }) {
+function SectionSentimentPhase({ phase }: { phase: AnyData }) {
   if (!phase) return null
   const PHASES = ['冰点', '筑底', '回升', '高潮', '顶背离', '退潮']
   const currentIdx = PHASES.indexOf(phase.phase)
@@ -1183,17 +1183,17 @@ function SectionSentimentPhase({ phase }: { phase: any }) {
 }
 
 // ========== Section 新增：风险雷达 ==========
-function SectionRiskRadar({ summary, brokenData }: { summary: MarketSummary; brokenData: any }) {
+function SectionRiskRadar({ summary, brokenData }: { summary: MarketSummary; brokenData: AnyData }) {
   const byReason = brokenData?.by_reason || {}
   const total = brokenData?.total || 0
-  const reasons = Object.entries(byReason).map(([reason, data]: [string, any]) => ({
+  const reasons = Object.entries(byReason).map(([reason, data]: [string, AnyData]) => ({
     reason,
     count: data.count || 0,
     pct: total > 0 ? Math.round((data.count || 0) / total * 100) : 0,
   })).sort((a, b) => b.count - a.count)
 
-  const highBoardBroken = Object.values(byReason).flatMap((d: any) =>
-    (d.cases || []).filter((c: any) => (c.board_count || 0) >= 2)
+  const highBoardBroken = Object.values(byReason).flatMap((d: AnyData) =>
+    (d.cases || []).filter((c: AnyData) => (c.board_count || 0) >= 2)
   ).length
   const brRate = summary.broken_rate || 0
   const riskLevel = brRate > 40 ? 'high' : brRate > 25 ? 'medium' : 'low'
@@ -1242,21 +1242,21 @@ function SectionRiskRadar({ summary, brokenData }: { summary: MarketSummary; bro
 }
 
 // ========== Section 新增：次日观察池 ==========
-function SectionWatchlist({ strategy }: { strategy: any }) {
+function SectionWatchlist({ strategy }: { strategy: AnyData }) {
   if (!strategy) return null
   const scenarios = strategy.scenarios || strategy
   const premium = scenarios.premium || scenarios.溢价 || {}
   const dip = scenarios.dip || scenarios.低吸 || {}
   const ladder = scenarios.ladder || scenarios.接力 || {}
 
-  const renderPool = (title: string, icon: React.ReactNode, color: string, data: any) => {
+  const renderPool = (title: string, icon: React.ReactNode, color: string, data: AnyData) => {
     const candidates = data?.stocks || []
     if (!candidates.length && !data?.condition) return null
     return (
       <Card size="small" title={<span style={{ color }}>{icon} {title}</span>} style={{ flex: 1, minWidth: 200 }}>
         {data?.condition && <div style={{ fontSize: 12, color: '#666', marginBottom: 6 }}>触发：{data.condition}</div>}
         {data?.invalidate && <div style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>失效：{data.invalidate}</div>}
-        {candidates.map((s: any, i: number) => (
+        {candidates.map((s: AnyData, i: number) => (
           <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #f5f5f5' }}>
             <Link to={`/stock/${s.stock_code || ''}`} style={{ fontWeight: 600 }}>
               {s.stock_name || '—'}
@@ -1292,9 +1292,9 @@ export default function ReplayPageV2() {
   const [sectors, setSectors] = useState<SectorRaw[]>([])
   const [relay, setRelay] = useState<RelayResp | null>(null)
   const [capitalFlow, setCapitalFlow] = useState<CapitalItem[] | null>(null)
-  const [phase, setPhase] = useState<any>(null)
-  const [brokenData, setBrokenData] = useState<any>(null)
-  const [strategy, setStrategy] = useState<any>(null)
+  const [phase, setPhase] = useState<AnyData>(null)
+  const [brokenData, setBrokenData] = useState<AnyData>(null)
+  const [strategy, setStrategy] = useState<AnyData>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [apiMeta, setApiMeta] = useState<ApiMeta[]>([])
@@ -1313,9 +1313,9 @@ export default function ReplayPageV2() {
       fetchApi<{ data: SectorRaw[] }>(`/market/sectors${q}`),
       fetchApi<RelayResp>(`/market/ladder-relay${q}`).catch(() => null),
       fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow${q}`).catch(() => ({ data: [] })),
-      fetchApi<any>('/market/sentiment-phase').catch(() => null),
-      fetchApi<any>(`/analysis/broken-cases${q}`).catch(() => null),
-      fetchApi<any>(`/market/next-day-strategy${q}`).catch(() => null),
+      fetchApi<AnyData>('/market/sentiment-phase').catch(() => null),
+      fetchApi<AnyData>(`/analysis/broken-cases${q}`).catch(() => null),
+      fetchApi<AnyData>(`/market/next-day-strategy${q}`).catch(() => null),
     ])
       .then(([s, l, sec, r, cf, ph, br, st]) => {
         setSummary(s); setLadder(l); setSectors(sec.data || []); setRelay(r)

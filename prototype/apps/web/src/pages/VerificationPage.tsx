@@ -8,6 +8,7 @@ import {
 import { fetchApi, postApi } from '../api/client'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
+import type { AnyData } from '../api/types'
 
 const BrokenCasesPage = lazy(() => import('./BrokenCasesPage'))
 const LonghuPage = lazy(() => import('./LonghuPage'))
@@ -43,16 +44,16 @@ interface ApiMeta {
 
 function RiskDashboard() {
   const [data, setData] = useState<RiskOverview | null>(null)
-  const [phase, setPhase] = useState<any>(null)
+  const [phase, setPhase] = useState<AnyData>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
   const [meta, setMeta] = useState<ApiMeta[]>([])
 
   useEffect(() => {
     Promise.all([
-      fetchApi<any>('/analysis/broken-cases'),
-      fetchApi<any>('/market/summary'),
-      fetchApi<any>('/market/sentiment-phase').catch(() => null),
+      fetchApi<AnyData>('/analysis/broken-cases'),
+      fetchApi<AnyData>('/market/summary'),
+      fetchApi<AnyData>('/market/sentiment-phase').catch(() => null),
     ]).then(([broken, summary, ph]) => {
       setPhase(ph)
       setMeta([
@@ -65,11 +66,11 @@ function RiskDashboard() {
       const total = broken.total || 0
       const brRate = summary.broken_rate || 0
       const sealRate = summary.seal_success_rate || 0
-      const highBoardBroken = Object.values(byReason).flatMap((d: any) =>
-        (d.cases || []).filter((c: any) => (c.board_count || 0) >= 2)
+      const highBoardBroken = Object.values(byReason).flatMap((d: AnyData) =>
+        (d.cases || []).filter((c: AnyData) => (c.board_count || 0) >= 2)
       ).length
       const topReasons: [string, number][] = Object.entries(byReason)
-        .map(([reason, d]: [string, any]) => [reason, d.count || 0] as [string, number])
+        .map(([reason, d]: [string, AnyData]) => [reason, d.count || 0] as [string, number])
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
       setData({
@@ -202,16 +203,16 @@ interface StrategyBacktest {
 }
 
 function StrategyTemplatesTab() {
-  const [templates, setTemplates] = useState<Record<string, any>>({})
+  const [templates, setTemplates] = useState<Record<string, AnyData>>({})
   const [results, setResults] = useState<Record<string, StrategyBacktest>>({})
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchApi<{ templates: Record<string, any> }>('/strategy/templates')
+    fetchApi<{ templates: Record<string, AnyData> }>('/strategy/templates')
       .then((r) => setTemplates(r.templates || {}))
-      .catch((e: any) => message.error(e?.message || '策略模板加载失败'))
+      .catch((e: AnyData) => message.error((e as Error)?.message || '策略模板加载失败'))
   }, [])
 
   const names = Object.keys(templates)
@@ -219,7 +220,7 @@ function StrategyTemplatesTab() {
   const runTemplate = async (name: string) => {
     setRunning(name)
     try {
-      const r = await fetchApi<any>('/market/sentiment-phase').catch(() => null)
+      const r = await fetchApi<AnyData>('/market/sentiment-phase').catch(() => null)
       const data = await postApi<{ result: StrategyBacktest | null; data_status?: string; message?: string }>(`/strategy/run-template?template_name=${encodeURIComponent(name)}&years=3`)
       if (!data.result) {
         setErrors((prev) => ({ ...prev, [name]: data.message || '真实历史行情不可用' }))
@@ -239,8 +240,8 @@ function StrategyTemplatesTab() {
         return next
       })
       if (r?.phase) message.success(`已按近 3 年数据回测：${name}（当前情绪 ${r.phase}）`)
-    } catch (e: any) {
-      message.error(e?.message || '回测失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '回测失败')
     } finally {
       setRunning(null)
     }
@@ -260,8 +261,8 @@ function StrategyTemplatesTab() {
       setErrors(nextErrors)
       if (Object.keys(next).length) message.success(`已完成 ${Object.keys(next).length} 个策略模板回测`)
       if (Object.keys(nextErrors).length) message.warning(`${Object.keys(nextErrors).length} 个策略缺少真实历史行情`)
-    } catch (e: any) {
-      message.error(e?.message || '批量回测失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '批量回测失败')
     } finally {
       setLoading(false)
     }
@@ -294,36 +295,36 @@ function StrategyTemplatesTab() {
               title: '策略',
               dataIndex: 'name',
               width: 150,
-              render: (name: string, row: any) => (
+              render: (name: string, row: AnyData) => (
                 <div>
                   <b>{name}</b>
                   <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>{row.note.desc}</div>
                 </div>
               ),
             },
-            { title: '适用环境', width: 130, render: (_: any, row: any) => <Tag color="blue">{row.note.suit}</Tag> },
+            { title: '适用环境', width: 130, render: (_: AnyData, row: AnyData) => <Tag color="blue">{row.note.suit}</Tag> },
             {
               title: '胜率',
               width: 90,
-              render: (_: any, row: any) => row.result ? `${safeNum(row.result.win_rate).toFixed(1)}%` : row.error ? <Tag color="orange">不可用</Tag> : '待回测',
-              sorter: (a: any, b: any) => (a.result?.win_rate || 0) - (b.result?.win_rate || 0),
+              render: (_: AnyData, row: AnyData) => row.result ? `${safeNum(row.result.win_rate).toFixed(1)}%` : row.error ? <Tag color="orange">不可用</Tag> : '待回测',
+              sorter: (a: AnyData, b: AnyData) => (a.result?.win_rate || 0) - (b.result?.win_rate || 0),
             },
             {
               title: '总收益',
               width: 90,
-              render: (_: any, row: any) => row.result
+              render: (_: AnyData, row: AnyData) => row.result
                 ? <span style={{ color: safeNum(row.result.total_return) >= 0 ? '#f5222d' : '#52c41a' }}>{safeNum(row.result.total_return).toFixed(2)}%</span>
                 : '—',
-              sorter: (a: any, b: any) => (a.result?.total_return || 0) - (b.result?.total_return || 0),
+              sorter: (a: AnyData, b: AnyData) => (a.result?.total_return || 0) - (b.result?.total_return || 0),
             },
-            { title: '夏普', width: 80, render: (_: any, row: any) => row.result ? safeNum(row.result.sharpe_ratio).toFixed(2) : '—' },
-            { title: '回撤', width: 80, render: (_: any, row: any) => row.result ? `${safeNum(row.result.max_drawdown).toFixed(2)}%` : '—' },
-            { title: '交易数', width: 80, render: (_: any, row: any) => row.result?.total_trades ?? '—' },
-            { title: '核心风险', render: (_: any, row: any) => <span style={{ color: row.error ? '#fa8c16' : '#666' }}>{row.error || row.note.risk}</span> },
+            { title: '夏普', width: 80, render: (_: AnyData, row: AnyData) => row.result ? safeNum(row.result.sharpe_ratio).toFixed(2) : '—' },
+            { title: '回撤', width: 80, render: (_: AnyData, row: AnyData) => row.result ? `${safeNum(row.result.max_drawdown).toFixed(2)}%` : '—' },
+            { title: '交易数', width: 80, render: (_: AnyData, row: AnyData) => row.result?.total_trades ?? '—' },
+            { title: '核心风险', render: (_: AnyData, row: AnyData) => <span style={{ color: row.error ? '#fa8c16' : '#666' }}>{row.error || row.note.risk}</span> },
             {
               title: '操作',
               width: 110,
-              render: (_: any, row: any) => (
+              render: (_: AnyData, row: AnyData) => (
                 <Button size="small" loading={running === row.name} onClick={() => runTemplate(row.name)}>
                   回测
                 </Button>

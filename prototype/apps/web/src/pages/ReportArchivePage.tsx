@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import Markdown from 'react-markdown'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import type { AnyData } from '../api/types'
 
 const SENT_COLORS: Record<string, string> = { '冰点': 'blue', '低迷': 'cyan', '中性': 'default', '回暖': 'orange', '高潮': 'red' }
 
@@ -87,7 +88,7 @@ function MarketArchivePanel() {
           { title: '封板率', dataIndex: 'seal_success_rate', width: 90, render: (v: number) => v ? `${v.toFixed?.(1)}%` : '—' },
           {
             title: '操作', width: 100,
-            render: (_: any, r: ArchiveItem) => (
+            render: (_: AnyData, r: ArchiveItem) => (
               <Button size="small" type="link"
                 onClick={() => askAI(`回看 ${r.trade_date}：情绪${r.sentiment_level}（${r.sentiment_score}分），涨停${r.limit_up_count}最高${r.max_board}板，炸板率${r.broken_rate?.toFixed?.(1)}%。这一天的市场特征是什么？后续 5 日表现？`)}
               >AI 回看</Button>
@@ -101,13 +102,13 @@ function MarketArchivePanel() {
 }
 
 export default function ReportArchivePage() {
-  const [reports, setReports] = useState<any[]>([])
+  const [reports, setReports] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedReport, setSelectedReport] = useState<any>(null)
+  const [selectedReport, setSelectedReport] = useState<AnyData>(null)
 
   const loadReports = () => {
     setLoading(true)
-    fetchApi<{ reports: any[] }>('/analysis/report-archive')
+    fetchApi<{ reports: AnyData[] }>('/analysis/report-archive')
       .then(res => setReports(res.reports || []))
       .catch(console.error)
       .finally(() => setLoading(false))

@@ -60,8 +60,8 @@ export default function VipPage() {
       setLocalUser(r.user)
       message.success(r.message || '开通成功！')
       setInviteCode('')
-    } catch (e: any) {
-      message.error(e?.message || '兑换失败')
+    } catch (e) {
+      message.error((e as Error)?.message || '兑换失败')
     } finally {
       setRedeeming(false)
     }
