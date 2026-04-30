@@ -114,6 +114,13 @@ EXEMPT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/style/onboarding", "问卷写入"),
     ("/api/watchlist", "自选股 CRUD"),
     ("/api/lab/alert-rules POST", "Lab 写入操作"),
+    # ── M001/S03/T04 业主 admin 后台 —— Cookie 录入 / 健康面板 / 告警 ack
+    ("/api/admin/kpl-cookie", "admin metadata-only 不返 data"),
+    ("/api/admin/kpl-cookie POST", "admin Cookie 写入操作"),
+    ("/api/admin/health/kpl", "admin 健康面板状态"),
+    ("/api/admin/health/kpl/trigger POST", "admin 手动触发健康探测"),
+    ("/api/admin/alerts", "admin 告警列表"),
+    ("/api/admin/alerts/{id}/ack POST", "admin 告警 ack 写入操作"),
     ("/ws", "WebSocket 协议异类"),
 ]
 

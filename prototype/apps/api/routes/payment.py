@@ -13,7 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from apps.api.auth import current_user, set_vip
+from apps.api.auth import current_user, require_admin, set_vip
 from apps.api.db import execute, query_one, query_all
 
 logger = logging.getLogger(__name__)
@@ -138,8 +138,7 @@ class GenerateCodesInput(BaseModel):
 @router.post("/admin/generate-codes")
 def generate_invite_codes(inp: GenerateCodesInput, user: dict = Depends(current_user)):
     """管理员批量生成邀请码。"""
-    if user.get("vip_level") != "pro" or user.get("phone") != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可操作")
+    require_admin(user)
     if inp.plan not in ("standard", "pro"):
         raise HTTPException(status_code=400, detail="plan 必须为 standard 或 pro")
     if inp.count < 1 or inp.count > 100:
@@ -162,8 +161,7 @@ def generate_invite_codes(inp: GenerateCodesInput, user: dict = Depends(current_
 @router.get("/admin/codes")
 def list_invite_codes(user: dict = Depends(current_user)):
     """管理员查看所有邀请码。"""
-    if user.get("vip_level") != "pro" or user.get("phone") != "admin":
-        raise HTTPException(status_code=403, detail="仅管理员可操作")
+    require_admin(user)
     rows = query_all("SELECT * FROM invite_codes ORDER BY created_at DESC LIMIT 200")
     return {"codes": rows}
 
