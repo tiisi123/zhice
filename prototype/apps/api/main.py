@@ -44,6 +44,16 @@ from . import db  # noqa: F401  # ensure sqlite init
 
 logger = logging.getLogger("zhice.api")
 
+# Startup validation has already run inside Settings.validate_required_secrets
+# at config import time; reaching this line means the gate passed. Log the
+# observable shape (debug flag + DATABASE_URL scheme) so operators can confirm
+# without exposing any secret value.
+logger.info(
+    "启动校验通过：debug=%s, database_url scheme=%s",
+    settings.debug,
+    settings.database_url.split("://", 1)[0] if settings.database_url else "none",
+)
+
 
 class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

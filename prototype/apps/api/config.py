@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
+
+_logger = logging.getLogger("zhice.api.config")
+
+_ALLOWED_DB_SCHEMES = {"mysql", "mysql+pymysql"}
 
 
 class Settings(BaseSettings):
@@ -54,6 +59,13 @@ class Settings(BaseSettings):
     debug: bool = False
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
+    # Critical deployment secrets — validated on startup when debug=False.
+    # Empty defaults so debug-mode imports still succeed; production raises
+    # RuntimeError via validate_required_secrets when any of these is unset.
+    zhice_jwt_secret: str = ""
+    zhice_admin_password: str = ""
+    database_url: str = ""
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:
@@ -68,6 +80,49 @@ class Settings(BaseSettings):
         return bool(v)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @model_validator(mode="after")
+    def validate_required_secrets(self) -> "Settings":
+        """Block startup when critical deployment env vars are unset in production.
+
+        Production (debug=False): raises RuntimeError listing every missing key by
+        name (no values are echoed). DATABASE_URL must use a MySQL scheme — sqlite
+        fallback is forbidden to prevent silent downgrades. Debug mode logs a
+        warning instead so local development is unblocked.
+        """
+        required = (
+            ("ZHICE_JWT_SECRET", self.zhice_jwt_secret),
+            ("ZHICE_ADMIN_PASSWORD", self.zhice_admin_password),
+            ("DATABASE_URL", self.database_url),
+        )
+        missing = [name for name, value in required if not value.strip()]
+
+        if self.debug:
+            if missing:
+                _logger.warning(
+                    "DEBUG 模式：以下 env 未设置（生产模式将阻断启动）：%s",
+                    ", ".join(missing),
+                )
+            return self
+
+        if missing:
+            raise RuntimeError(
+                "启动校验失败：以下关键环境变量未设置或为空："
+                + ", ".join(missing)
+                + "。请在 .env / docker-compose env 中设置；"
+                "ZHICE_JWT_SECRET 可用 openssl rand -hex 32 生成。"
+            )
+
+        scheme = self.database_url.split("://", 1)[0].strip().lower()
+        if scheme not in _ALLOWED_DB_SCHEMES:
+            raise RuntimeError(
+                "启动校验失败：DATABASE_URL scheme '"
+                + scheme
+                + "' 不被支持。生产模式不允许 SQLite，"
+                "请配置 MySQL 连接串（如 mysql+pymysql://user:pass@host/db）。"
+            )
+
+        return self
 
 
 settings = Settings()
