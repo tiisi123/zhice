@@ -6,6 +6,12 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from apps.api.utils.contract import wrap_contract
+from packages.connectors.kpl.sentinel import (
+    cookie_unavailable_message,
+    from_client_state,
+    is_cookie_missing,
+    is_upstream_error,
+)
 from packages.connectors.registry import get_kpl
 
 router = APIRouter()
@@ -13,11 +19,37 @@ router = APIRouter()
 _kpl = get_kpl()
 
 
+def _maybe_unavailable(client, *, trade_date: str, **extra) -> Optional[dict]:
+    """Return wrap_contract unavailable dict iff the facade recorded a sentinel.
+
+    Built once, reused by every short-line handler in this module.
+    ``extra`` carries the schema fields the caller would have supplied
+    on success (e.g. ``count=0`` / ``rank=[]``) so the unavailable response
+    keeps the same shape as the real one.
+    """
+    sentinel = from_client_state(client)
+    if not sentinel:
+        return None
+    if not (is_cookie_missing(sentinel) or is_upstream_error(sentinel)):
+        return None
+    return wrap_contract(
+        [],
+        source="kpl",
+        status="unavailable",
+        message=cookie_unavailable_message(sentinel),
+        trade_date=trade_date,
+        **extra,
+    )
+
+
 @router.get("/limit-up")
 def limit_up_list(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_limit_up(trade_date) or []
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",
@@ -41,6 +73,9 @@ def broken_list(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_broken(trade_date) or []
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",
@@ -64,6 +99,9 @@ def hot_stocks(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_hot_stocks(trade_date) or []
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",
@@ -87,6 +125,9 @@ def anomaly(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_market_anomaly(trade_date) or []
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",

@@ -7,12 +7,41 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from apps.api.utils.contract import wrap_contract
+from packages.connectors.kpl.sentinel import (
+    cookie_unavailable_message,
+    from_client_state,
+    is_cookie_missing,
+    is_upstream_error,
+)
 from packages.connectors.registry import get_kpl
 from packages.features.longhu import FAMOUS_SEATS
 
 router = APIRouter()
 
 _kpl = get_kpl()
+
+
+def _maybe_unavailable(client, *, trade_date: str, **extra) -> Optional[dict]:
+    """Surface KPL Cookie missing / upstream error as longhu unavailable.
+
+    LongHuBang lives on the merge host (applhb) which requires KPL cookie via
+    facade ``_post``. When the operator has not configured cookie yet, the
+    sentinel surfaces here and the front-end ranks card flips to red instead
+    of silently rendering an empty rank that looks like "no longhu activity".
+    """
+    sentinel = from_client_state(client)
+    if not sentinel:
+        return None
+    if not (is_cookie_missing(sentinel) or is_upstream_error(sentinel)):
+        return None
+    return wrap_contract(
+        [],
+        source="kpl_longhu_bang",
+        status="unavailable",
+        message=cookie_unavailable_message(sentinel),
+        trade_date=trade_date,
+        **extra,
+    )
 
 
 def _match_famous(seat: str) -> str | None:
@@ -82,6 +111,11 @@ def seat_rank(date: Optional[str] = Query(None), top: int = 20):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         stocks = _kpl.get_longhu_stocks(trade_date) or []
+        unavail = _maybe_unavailable(
+            _kpl, trade_date=trade_date, rank=[], count=0, raw_count=0
+        )
+        if unavail is not None:
+            return unavail
         rank = _allocate(stocks)[:top]
         return wrap_contract(
             rank,
@@ -110,8 +144,14 @@ def seat_rank(date: Optional[str] = Query(None), top: int = 20):
 def stock_detail(code: str, date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
+        all_stocks = _kpl.get_longhu_stocks(trade_date) or []
+        unavail = _maybe_unavailable(
+            _kpl, trade_date=trade_date, code=code, rows=[], count=0
+        )
+        if unavail is not None:
+            return unavail
         rows = [
-            r for r in (_kpl.get_longhu_stocks(trade_date) or [])
+            r for r in all_stocks
             if (r.get("stock_code") or "")[:6] == code[:6]
         ]
         return wrap_contract(

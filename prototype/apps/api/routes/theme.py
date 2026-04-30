@@ -6,11 +6,41 @@ from typing import Optional
 from fastapi import APIRouter, Query
 
 from apps.api.utils.contract import wrap_contract
+from packages.connectors.kpl.sentinel import (
+    cookie_unavailable_message,
+    from_client_state,
+    is_cookie_missing,
+    is_upstream_error,
+)
 from packages.connectors.registry import get_kpl
 
 router = APIRouter()
 
 _kpl = get_kpl()
+
+
+def _maybe_unavailable(client, *, trade_date: str, body=None, source="kpl", **extra) -> Optional[dict]:
+    """Surface KPL Cookie missing / upstream error as theme-route unavailable.
+
+    Theme module endpoints all hit KPL realtime/history (cookie-required).
+    When the operator has not configured cookie, downstream routes silently
+    return empty arrays today — this helper turns that into an explicit
+    ``status='unavailable'`` so the front-end DataStatusBadge surfaces the
+    operator-action message instead of looking like "no themes today".
+    """
+    sentinel = from_client_state(client)
+    if not sentinel:
+        return None
+    if not (is_cookie_missing(sentinel) or is_upstream_error(sentinel)):
+        return None
+    return wrap_contract(
+        [] if body is None else body,
+        source=source,
+        status="unavailable",
+        message=cookie_unavailable_message(sentinel),
+        trade_date=trade_date,
+        **extra,
+    )
 
 
 def _trade_date(date: Optional[str]) -> str:
@@ -49,6 +79,9 @@ def theme_list(date: Optional[str] = Query(None)):
     trade_date = _trade_date(date)
     try:
         data = _kpl.get_theme_list(trade_date) or []
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",
@@ -72,6 +105,9 @@ def sector_list(date: Optional[str] = Query(None)):
     trade_date = _trade_date(date)
     try:
         data = _kpl.get_concept_selected(trade_date)
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         source = "kpl"
         if not data:
             data = _build_sectors_from_kpl_pool(trade_date)
@@ -136,6 +172,9 @@ def sector_detail(plate_id: str, date: Optional[str] = Query(None)):
                 count=0,
             )
         data = _kpl.get_concept_detail(plate_id, trade_date) or []
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",
@@ -290,6 +329,9 @@ def theme_detail(theme_id: str):
     trade_date = datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_theme_detail(theme_id) or {}
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, body={}, total=0)
+        if unavail is not None:
+            return unavail
         return wrap_contract(
             data,
             source="kpl",

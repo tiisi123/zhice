@@ -147,6 +147,13 @@ class KplClient:
         )
         # Merge host (LongHuBang + 公开 EM API) keeps its own httpx.Client
         self._client = httpx.Client(timeout=15, verify=False)
+        # T07 sentinel surface: routes layer reads `.last_error` /
+        # `.last_http_code` after each KPL-touching call to decide whether to
+        # short-circuit into wrap_contract status='unavailable'. Cleared on
+        # any non-sentinel response so a recovered call drops the unavailable
+        # state on the next request.
+        self.last_error: Optional[str] = None
+        self.last_http_code: Optional[int] = None
 
     def _headers(self, host_key: str = "merge") -> dict:
         h = _DEFAULT_HEADERS.copy()
@@ -216,10 +223,29 @@ class KplClient:
             return True
         return date_str == datetime.now().strftime("%Y-%m-%d")
 
+    def _record(self, resp):
+        """Update ``last_error`` / ``last_http_code`` from a raw sub-client response.
+
+        Sets the attributes when ``resp`` is a sentinel dict (has ``_error``)
+        and clears them otherwise. Routes layer reads these to convert the
+        latest call into a ``status='unavailable'`` contract response without
+        threading raw responses through the legacy 9-method signatures.
+
+        Always returns ``resp`` unchanged so call sites can chain it
+        (``resp = self._record(self._history.foo(...))``).
+        """
+        if isinstance(resp, dict) and resp.get("_error"):
+            self.last_error = resp.get("_error")
+            self.last_http_code = resp.get("http_code")
+        else:
+            self.last_error = None
+            self.last_http_code = None
+        return resp
+
     # --- legacy 9-method signature delegation ---
 
     def get_market_statistics(self, trade_date: str) -> list[dict]:
-        resp = self._history.get_market_statistics(trade_date)
+        resp = self._record(self._history.get_market_statistics(trade_date))
         if _is_sentinel(resp):
             return []
         info = resp.get("info") if isinstance(resp, dict) else None
@@ -251,6 +277,7 @@ class KplClient:
             resp = self._realtime.get_concept_selected(index=index, order=order_int)
         else:
             resp = self._history.get_concept_selected_history(trade_date, index=index)
+        self._record(resp)
         return _extract_list(resp)
 
     def get_concept_detail(
@@ -265,6 +292,7 @@ class KplClient:
             resp = self._history.get_concept_detail_history(
                 plate_id, trade_date, index=index
             )
+        self._record(resp)
         return _extract_list(resp)
 
     def get_concept_subsection(
@@ -272,6 +300,7 @@ class KplClient:
     ) -> list[dict]:
         if self._is_today(trade_date):
             resp = self._realtime.get_concept_subsection(plate_id)
+            self._record(resp)
             return _extract_list(resp)
         # daban_pc historical SonPlate_Info not exposed; return [] safely
         return []
@@ -283,13 +312,15 @@ class KplClient:
             order_int = int(order)
         except (TypeError, ValueError):
             order_int = 0
-        resp = self._history.get_limit_performance(
-            trade_date, daily_limit=daily_limit, order=order_int
+        resp = self._record(
+            self._history.get_limit_performance(
+                trade_date, daily_limit=daily_limit, order=order_int
+            )
         )
         return _extract_list(resp)
 
     def get_theme_list(self, trade_date: str) -> list[dict]:
-        resp = self._history.get_theme_list(trade_date)
+        resp = self._record(self._history.get_theme_list(trade_date))
         return _extract_list(resp)
 
     def get_theme_detail(self, theme_id: str) -> dict:
@@ -301,7 +332,7 @@ class KplClient:
             UserID=self.user_id,
         )
         # Theme detail is realtime endpoint — delegate via realtime _post
-        resp = self._realtime._post(KPL_REALTIME_HOST, data, "realtime")
+        resp = self._record(self._realtime._post(KPL_REALTIME_HOST, data, "realtime"))
         if _is_sentinel(resp):
             return {}
         return resp if isinstance(resp, dict) else {}
@@ -310,7 +341,7 @@ class KplClient:
         if not self._is_today(trade_date):
             # daban_pc historical Radar 不开放，返 [] 安全
             return []
-        resp = self._realtime.get_market_anomaly()
+        resp = self._record(self._realtime.get_market_anomaly())
         return _extract_list(resp)
 
     def _get_em_pool(self, url: str, trade_date: Optional[str] = None) -> list[dict]:
@@ -381,12 +412,18 @@ class KplClient:
         }
 
     def get_limit_up(self, trade_date: Optional[str] = None) -> list[dict]:
+        # Eastmoney public — no cookie path. Clear sentinel state so stale
+        # KPL last_error from a prior call does not leak into routes that
+        # combine this with KPL data (e.g. replay /summary).
+        self._record(None)
         return self._get_em_pool(_EM_ZT_POOL_URL, trade_date)
 
     def get_broken(self, trade_date: Optional[str] = None) -> list[dict]:
+        self._record(None)
         return self._get_em_pool(_EM_ZB_POOL_URL, trade_date)
 
     def get_hot_stocks(self, trade_date: Optional[str] = None) -> list[dict]:
+        self._record(None)
         rank_headers = {
             **_EM_HEADERS,
             "Content-Type": "application/json",
@@ -481,7 +518,7 @@ class KplClient:
             "Token": self.token or "0",
             "UserID": self.user_id or "0",
         }
-        raw = self._post(KPL_MERGE_HOST, data, "merge")
+        raw = self._record(self._post(KPL_MERGE_HOST, data, "merge"))
         if _is_sentinel(raw):
             return []
         rows = raw.get("list") or []

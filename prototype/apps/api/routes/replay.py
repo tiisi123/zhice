@@ -9,6 +9,12 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 
 from apps.api.utils.contract import wrap_contract
+from packages.connectors.kpl.sentinel import (
+    cookie_unavailable_message,
+    from_client_state,
+    is_cookie_missing,
+    is_upstream_error,
+)
 from packages.connectors.registry import get_kpl
 from packages.features.analysis import build_next_day_strategy
 from packages.features.market import build_market_summary
@@ -17,6 +23,30 @@ from packages.features.theme import classify_board_tier, identify_leader
 router = APIRouter()
 
 _kpl = get_kpl()
+
+
+def _maybe_unavailable(client, *, trade_date: str, body=None, **extra) -> Optional[dict]:
+    """Return wrap_contract unavailable dict iff facade recorded a KPL sentinel.
+
+    ``body`` defaults to ``[]`` and is the data payload returned alongside the
+    contract; pass ``{}`` for endpoints that wrap a dict instead of a list
+    (e.g. ``/summary``). Cookie_missing and upstream_error both surface as
+    ``status='unavailable'`` so the front-end DataStatusBadge turns red and
+    the operator is pointed at ``/admin``.
+    """
+    sentinel = from_client_state(client)
+    if not sentinel:
+        return None
+    if not (is_cookie_missing(sentinel) or is_upstream_error(sentinel)):
+        return None
+    return wrap_contract(
+        [] if body is None else body,
+        source="kpl",
+        status="unavailable",
+        message=cookie_unavailable_message(sentinel),
+        trade_date=trade_date,
+        **extra,
+    )
 
 # ladder/summary 快照路径，用于接力转化率与 Δ 对比
 _CACHE_DIR = Path(__file__).parent.parent.parent.parent / "data" / "cache"
@@ -90,6 +120,12 @@ def market_summary(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         kpl_stats = _kpl.get_market_statistics(trade_date)
+        # KPL cookie-dependent call above; if sentinel surfaced, short-circuit
+        # before pulling EM-public data so the contract reflects the real
+        # operator-action root cause (cookie missing) rather than masking it.
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, body={}, total=0)
+        if unavail is not None:
+            return unavail
         limit_up = _kpl.get_limit_up(trade_date)
         broken = _kpl.get_broken(trade_date)
         summary = build_market_summary(kpl_stats, limit_up, broken)
@@ -127,6 +163,14 @@ def board_ladder(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_limit_up(trade_date)
+        # ladder uses EM-public limit_up; sentinel will only surface here if a
+        # prior call left state and get_limit_up cleared it. Belt-and-braces
+        # check anyway for cookie awareness consistency across short-line.
+        unavail = _maybe_unavailable(
+            _kpl, trade_date=trade_date, body={}, total=0, tiers={}
+        )
+        if unavail is not None:
+            return unavail
         tiers = classify_board_tier(data)
         result = {}
         for tier_name, stocks in sorted(tiers.items(), reverse=True):
@@ -232,6 +276,9 @@ def sector_ranking(date: Optional[str] = Query(None)):
     try:
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
         data = _kpl.get_concept_selected(trade_date)
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
+        if unavail is not None:
+            return unavail
         return {"count": len(data), "data": data}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取板块排行失败: {str(e)}")
@@ -242,7 +289,13 @@ def limit_performance(date: Optional[str] = Query(None)):
     try:
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
         up = _kpl.get_limit_performance(trade_date, daily_limit=True)
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, body={}, count=0)
+        if unavail is not None:
+            return unavail
         down = _kpl.get_limit_performance(trade_date, daily_limit=False)
+        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, body={}, count=0)
+        if unavail is not None:
+            return unavail
         return {"涨停": up, "未涨停": down}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取涨停表现失败: {str(e)}")
