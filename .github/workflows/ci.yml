@@ -100,18 +100,60 @@ jobs:
         run: npm run typecheck
 
   api_contract:
-    name: API Contract（占位 / py_compile）
+    name: API Contract（强制 D004 三字段 + 6 值 enum + mock⟺status 一致性）
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0.36
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-pass
+          MYSQL_DATABASE: zhice
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ZHICE_JWT_SECRET: ci-jwt-secret-not-real-prod
+      ZHICE_ADMIN_PASSWORD: ci-admin-pass
+      DATABASE_URL: mysql+pymysql://root:ci-root-pass@127.0.0.1:3306/zhice
+      DEBUG: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: 校验 check_api_contract.py 语法
-        # S02 升级路由响应三字段后再起 api 跑真契约。
-        # 本 slice 只确认脚本本身可执行（防 import 断裂）。
-        run: python -m py_compile prototype/scripts/check_api_contract.py
+      - name: pip install prototype（含 fastapi/uvicorn/sqlalchemy/alembic/pymysql）
+        run: pip install -e prototype
+      - name: alembic upgrade head（在 mysql service 上建全表）
+        working-directory: prototype
+        run: alembic upgrade head
+      - name: uvicorn 后台起 api（输出 → /tmp/uvicorn.log）
+        working-directory: prototype
+        # nohup + 显式 stdout/stderr 重定向：避免 GHA shell 卡在 stream-inheritance；
+        # 进程在后续 step 持续可达。
+        run: nohup uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 &
+      - name: 等待 uvicorn ready（健康检查代替固定 sleep）
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8000/api/health > /dev/null; then
+              echo "uvicorn ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "uvicorn 未在 20s 内响应 /api/health" >&2
+          tail -n 80 /tmp/uvicorn.log >&2 || true
+          exit 1
+      - name: 跑 check_api_contract.py（D004 强制契约）
+        working-directory: prototype
+        run: python scripts/check_api_contract.py
+      - name: 失败时打印 uvicorn 日志（事后排障）
+        if: failure()
+        run: tail -n 200 /tmp/uvicorn.log || true
 
   no_mock:
     name: No Mock（生产代码不得含 mock）
