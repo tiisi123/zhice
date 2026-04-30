@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from apps.api.auth import consume_quota
 from apps.api.db import execute
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.market import build_market_summary
 from apps.ai.agents.agents import (
@@ -147,21 +148,29 @@ def stock_insight(code: str, date: Optional[str] = Query(None)):
                 break
 
         if not stock:
-            return {
-                "code": code,
-                "name": code,
-                "report": "",
-                "source": "kpl",
-                "data_status": "empty",
-                "message": "该股票不在真实涨停/炸板/热股池中，暂不生成短线洞察",
-            }
+            return wrap_contract(
+                {},
+                source="kpl",
+                status="empty",
+                message="该股票不在真实涨停/炸板/热股池中，暂不生成短线洞察",
+                code=code,
+                name=code,
+                report="",
+            )
 
         themes = stock.get("related_plates", [])
         if not themes and stock.get("first_plate_name"):
             themes = [stock["first_plate_name"]]
 
         report = _stock_agent.generate_summary(stock, themes)
-        return {"code": code, "name": stock.get("stock_name", code), "report": report, "source": "kpl", "data_status": "ok"}
+        return wrap_contract(
+            {"code": code, "name": stock.get("stock_name", code), "report": report},
+            source="kpl",
+            status="real",
+            code=code,
+            name=stock.get("stock_name", code),
+            report=report,
+        )
     except Exception:
         logger.exception("生成个股洞察失败: %s", code)
         raise HTTPException(status_code=500, detail="生成个股洞察失败，请稍后重试")

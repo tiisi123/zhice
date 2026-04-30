@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 
 router = APIRouter()
@@ -14,42 +15,6 @@ _kpl = get_kpl()
 
 def _trade_date(date: Optional[str]) -> str:
     return date or datetime.now().strftime("%Y-%m-%d")
-
-
-def _now_text() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _list_response(
-    trade_date: str,
-    data: list[dict],
-    source: str = "kpl",
-    data_status: str = "ok",
-    message: str = "",
-) -> dict:
-    return {
-        "trade_date": trade_date,
-        "updated_at": _now_text(),
-        "count": len(data),
-        "data": data,
-        "source": source,
-        "data_status": data_status if data else "empty",
-        "mock": False,
-        "message": message,
-    }
-
-
-def _unavailable_response(trade_date: str, source: str, message: str) -> dict:
-    return {
-        "trade_date": trade_date,
-        "updated_at": _now_text(),
-        "count": 0,
-        "data": [],
-        "source": source,
-        "data_status": "unavailable",
-        "mock": False,
-        "message": message,
-    }
 
 
 def _build_sectors_from_kpl_pool(trade_date: str) -> list[dict]:
@@ -83,10 +48,23 @@ def _build_sectors_from_kpl_pool(trade_date: str) -> list[dict]:
 def theme_list(date: Optional[str] = Query(None)):
     trade_date = _trade_date(date)
     try:
-        data = _kpl.get_theme_list(trade_date)
-        return _list_response(trade_date, data or [])
+        data = _kpl.get_theme_list(trade_date) or []
+        return wrap_contract(
+            data,
+            source="kpl",
+            status="real",
+            trade_date=trade_date,
+            count=len(data),
+        )
     except Exception as e:
-        return _unavailable_response(trade_date, "kpl", f"获取题材列表失败: {str(e)}")
+        return wrap_contract(
+            [],
+            source="kpl",
+            status="unavailable",
+            message=f"获取题材列表失败: {str(e)}",
+            trade_date=trade_date,
+            count=0,
+        )
 
 
 @router.get("/sectors")
@@ -103,9 +81,23 @@ def sector_list(date: Optional[str] = Query(None)):
             data = mark_themes(data, trade_date)
         except Exception:
             pass
-        return _list_response(trade_date, data or [], source)
+        data = data or []
+        return wrap_contract(
+            data,
+            source=source,
+            status="real",
+            trade_date=trade_date,
+            count=len(data),
+        )
     except Exception as e:
-        return _unavailable_response(trade_date, "kpl", f"获取板块列表失败: {str(e)}")
+        return wrap_contract(
+            [],
+            source="kpl",
+            status="unavailable",
+            message=f"获取板块列表失败: {str(e)}",
+            trade_date=trade_date,
+            count=0,
+        )
 
 
 @router.get("/sectors/{plate_id}")
@@ -113,7 +105,13 @@ def sector_detail(plate_id: str, date: Optional[str] = Query(None)):
     trade_date = _trade_date(date)
     try:
         if plate_id.startswith("mock_"):
-            return _list_response(trade_date, [], "kpl")
+            return wrap_contract(
+                [],
+                source="kpl",
+                status="empty",
+                trade_date=trade_date,
+                count=0,
+            )
         if plate_id.startswith("xgt_") or plate_id.startswith("kpl_pool_"):
             sectors = _build_sectors_from_kpl_pool(trade_date)
             for sec in sectors:
@@ -123,12 +121,37 @@ def sector_detail(plate_id: str, date: Optional[str] = Query(None)):
                         {"SecurityCode": s["stock_code"], "SecurityName": s["stock_name"], "ChangePercent": s["change_rate"]}
                         for s in stocks
                     ]
-                    return _list_response(trade_date, detail, "kpl_pool_derived")
-            return _list_response(trade_date, [], "kpl_pool_derived")
-        data = _kpl.get_concept_detail(plate_id, trade_date)
-        return _list_response(trade_date, data or [])
+                    return wrap_contract(
+                        detail,
+                        source="kpl_pool_derived",
+                        status="real",
+                        trade_date=trade_date,
+                        count=len(detail),
+                    )
+            return wrap_contract(
+                [],
+                source="kpl_pool_derived",
+                status="empty",
+                trade_date=trade_date,
+                count=0,
+            )
+        data = _kpl.get_concept_detail(plate_id, trade_date) or []
+        return wrap_contract(
+            data,
+            source="kpl",
+            status="real",
+            trade_date=trade_date,
+            count=len(data),
+        )
     except Exception as e:
-        return _unavailable_response(trade_date, "kpl", f"获取板块详情失败: {str(e)}")
+        return wrap_contract(
+            [],
+            source="kpl",
+            status="unavailable",
+            message=f"获取板块详情失败: {str(e)}",
+            trade_date=trade_date,
+            count=0,
+        )
 
 
 @router.get("/cycle/{theme}")
@@ -183,19 +206,21 @@ def theme_cycle(theme: str, days: int = Query(10, ge=3, le=30)):
         novelty=novelty,
     )
     style = PHASE_STYLE.get(result["phase"], {"color": "default", "icon": ""})
+    has_data = bool(today_sector or history)
     result.update({
-        "trade_date": today,
-        "updated_at": _now_text(),
-        "source": "kpl",
-        "data_status": "ok" if today_sector or history else "empty",
-        "mock": False,
-        "total": 1 if today_sector or history else 0,
         "first_seen": first_seen,
         "last_seen": last_seen,
         "color": style["color"],
         "icon": style["icon"],
     })
-    return result
+    return wrap_contract(
+        result,
+        source="kpl",
+        status="real" if has_data else "empty",
+        trade_date=today,
+        total=1 if has_data else 0,
+        **result,
+    )
 
 
 @router.get("/cycle-batch")
@@ -213,15 +238,14 @@ def theme_cycle_batch(date: Optional[str] = Query(None), top: int = Query(10, ge
     except Exception:
         sectors = []
     if not sectors:
-        return {
-            "items": [],
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "source": "kpl",
-            "data_status": "empty",
-            "mock": False,
-            "total": 0,
-        }
+        return wrap_contract(
+            [],
+            source="kpl",
+            status="empty",
+            trade_date=trade_date,
+            total=0,
+            items=[],
+        )
 
     out: list[dict] = []
     for s in sectors[:top]:
@@ -251,40 +275,34 @@ def theme_cycle_batch(date: Optional[str] = Query(None), top: int = Query(10, ge
             "today_limit_up": result["today_limit_up"],
             "advice": result["advice"],
         })
-    return {
-        "items": out,
-        "trade_date": trade_date,
-        "updated_at": _now_text(),
-        "source": "kpl",
-        "data_status": "ok" if out else "empty",
-        "mock": False,
-        "total": len(out),
-    }
+    return wrap_contract(
+        out,
+        source="kpl",
+        status="real" if out else "empty",
+        trade_date=trade_date,
+        total=len(out),
+        items=out,
+    )
 
 
 @router.get("/{theme_id}")
 def theme_detail(theme_id: str):
     trade_date = datetime.now().strftime("%Y-%m-%d")
     try:
-        data = _kpl.get_theme_detail(theme_id)
-        total = 1 if data else 0
-        return {
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "data": data or {},
-            "total": total,
-            "source": "kpl",
-            "data_status": "ok" if data else "empty",
-            "mock": False,
-        }
+        data = _kpl.get_theme_detail(theme_id) or {}
+        return wrap_contract(
+            data,
+            source="kpl",
+            status="real" if data else "empty",
+            trade_date=trade_date,
+            total=1 if data else 0,
+        )
     except Exception as e:
-        return {
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "data": {},
-            "total": 0,
-            "source": "kpl",
-            "data_status": "unavailable",
-            "mock": False,
-            "message": f"获取题材详情失败: {str(e)}",
-        }
+        return wrap_contract(
+            {},
+            source="kpl",
+            status="unavailable",
+            message=f"获取题材详情失败: {str(e)}",
+            trade_date=trade_date,
+            total=0,
+        )

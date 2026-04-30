@@ -46,5 +46,13 @@
     "seal_success_rate": 71.58,
     "max_board": 6,
     "sentiment_level": "中性"
+  },
+  "2026-04-30": {
+    "limit_up_count": 1,
+    "broken_count": 1,
+    "broken_rate": 0.0,
+    "seal_success_rate": 0.0,
+    "max_board": 0,
+    "sentiment_level": "demo"
   }
 }

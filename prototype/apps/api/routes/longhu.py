@@ -6,16 +6,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Query
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.longhu import FAMOUS_SEATS
 
 router = APIRouter()
 
 _kpl = get_kpl()
-
-
-def _now_text() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _match_famous(seat: str) -> str | None:
@@ -81,29 +78,27 @@ def seat_rank(date: Optional[str] = Query(None), top: int = 20):
     try:
         stocks = _kpl.get_longhu_stocks(trade_date) or []
         rank = _allocate(stocks)[:top]
-        return {
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "rank": rank,
-            "count": len(rank),
-            "source": "kpl_longhu_bang",
-            "data_status": "ok" if rank else "empty",
-            "mock": False,
-            "raw_count": len(stocks),
-            "note": "席位来自 KPL 龙虎榜接口；买卖金额按股票净买额在同向席位中等分聚合。",
-        }
+        return wrap_contract(
+            rank,
+            source="kpl_longhu_bang",
+            status="real",
+            trade_date=trade_date,
+            rank=rank,
+            count=len(rank),
+            raw_count=len(stocks),
+            note="席位来自 KPL 龙虎榜接口；买卖金额按股票净买额在同向席位中等分聚合。",
+        )
     except Exception as e:
-        return {
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "rank": [],
-            "count": 0,
-            "source": "kpl_longhu_bang",
-            "data_status": "unavailable",
-            "mock": False,
-            "raw_count": 0,
-            "message": f"龙虎榜数据失败: {e}",
-        }
+        return wrap_contract(
+            [],
+            source="kpl_longhu_bang",
+            status="unavailable",
+            message=f"龙虎榜数据失败: {e}",
+            trade_date=trade_date,
+            rank=[],
+            count=0,
+            raw_count=0,
+        )
 
 
 @router.get("/stock/{code}")
@@ -114,25 +109,23 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
             r for r in (_kpl.get_longhu_stocks(trade_date) or [])
             if (r.get("stock_code") or "")[:6] == code[:6]
         ]
-        return {
-            "code": code,
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "rows": rows,
-            "count": len(rows),
-            "source": "kpl_longhu_bang",
-            "data_status": "ok" if rows else "empty",
-            "mock": False,
-        }
+        return wrap_contract(
+            rows,
+            source="kpl_longhu_bang",
+            status="real",
+            code=code,
+            trade_date=trade_date,
+            rows=rows,
+            count=len(rows),
+        )
     except Exception as e:
-        return {
-            "code": code,
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "rows": [],
-            "count": 0,
-            "source": "kpl_longhu_bang",
-            "data_status": "unavailable",
-            "mock": False,
-            "message": f"查询失败: {e}",
-        }
+        return wrap_contract(
+            [],
+            source="kpl_longhu_bang",
+            status="unavailable",
+            message=f"查询失败: {e}",
+            code=code,
+            trade_date=trade_date,
+            rows=[],
+            count=0,
+        )

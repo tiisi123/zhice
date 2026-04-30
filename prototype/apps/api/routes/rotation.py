@@ -7,6 +7,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.theme_novelty import mark_themes, list_recent_new
 from packages.features.expectation import batch_evaluate, evaluate
@@ -53,32 +54,39 @@ def simulate(inp: SimulateIn):
                     indirect[name2] = (combined_p, combined_lag)
             else:
                 indirect[name2] = (combined_p, combined_lag)
-    result = {
+    direct_list = [
+        {"theme": n, "probability": p, "avg_lag_days": lag}
+        for n, p, lag in direct
+    ]
+    indirect_list = [
+        {"theme": n, "probability": p, "avg_lag_days": lag}
+        for n, (p, lag) in sorted(indirect.items(), key=lambda x: -x[1][0])
+    ]
+    payload = {
         "trigger": trigger,
-        "direct": [
-            {"theme": n, "probability": p, "avg_lag_days": lag}
-            for n, p, lag in direct
-        ],
-        "indirect": [
-            {"theme": n, "probability": p, "avg_lag_days": lag}
-            for n, (p, lag) in sorted(indirect.items(), key=lambda x: -x[1][0])
-        ],
+        "direct": direct_list,
+        "indirect": indirect_list,
         "known_themes": sorted(TRANSMISSION_MAP.keys()),
-        "source": "transmission_rule_matrix",
         "output_type": "rule_inference",
-        "data_status": "ok" if direct or indirect else "empty",
     }
-    return result
+    return wrap_contract(
+        payload,
+        source="transmission_rule_matrix",
+        status="real" if (direct_list or indirect_list) else "empty",
+        **payload,
+    )
 
 
 @router.get("/known-themes")
 def known_themes():
-    return {
-        "themes": sorted(TRANSMISSION_MAP.keys()),
-        "source": "transmission_rule_matrix",
-        "output_type": "rule_inference",
-        "data_status": "ok",
-    }
+    themes = sorted(TRANSMISSION_MAP.keys())
+    return wrap_contract(
+        themes,
+        source="transmission_rule_matrix",
+        status="real",
+        themes=themes,
+        output_type="rule_inference",
+    )
 
 
 @router.get("/novelty")
@@ -88,13 +96,14 @@ def novelty(date: Optional[str] = Query(None), days: int = 3):
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
         sectors = _kpl.get_concept_selected(trade_date) or []
         marked = mark_themes(sectors, trade_date)
-        return {
-            "trade_date": trade_date,
-            "themes": marked,
-            "new_recent": list_recent_new(days=days),
-            "source": "kpl",
-            "data_status": "ok" if marked else "empty",
-        }
+        return wrap_contract(
+            marked,
+            source="kpl",
+            status="real" if marked else "empty",
+            trade_date=trade_date,
+            themes=marked,
+            new_recent=list_recent_new(days=days),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"新题材识别失败: {e}")
 
@@ -108,8 +117,13 @@ class GapIn(BaseModel):
 @router.post("/expectation-gap")
 def expectation_gap(inp: GapIn):
     result = evaluate(inp.news, inp.change_rate, inp.vol_ratio)
-    result.update({"source": "expectation_rule_model", "output_type": "rule_score", "data_status": "ok"})
-    return result
+    return wrap_contract(
+        result,
+        source="expectation_rule_model",
+        status="real",
+        output_type="rule_score",
+        **result,
+    )
 
 
 class BatchGapIn(BaseModel):
@@ -118,12 +132,14 @@ class BatchGapIn(BaseModel):
 
 @router.post("/expectation-gap/batch")
 def expectation_gap_batch(inp: BatchGapIn):
-    return {
-        "items": batch_evaluate(inp.items),
-        "source": "expectation_rule_model",
-        "output_type": "rule_score",
-        "data_status": "ok",
-    }
+    items = batch_evaluate(inp.items)
+    return wrap_contract(
+        items,
+        source="expectation_rule_model",
+        status="real" if items else "empty",
+        items=items,
+        output_type="rule_score",
+    )
 
 
 @router.get("/theme-history/{theme}")
@@ -151,11 +167,12 @@ def theme_history(theme: str, days: int = 90):
                     "intensity": match.get("Intensity") or match.get("intensity") or 0,
                     "change_rate": match.get("ChangePercent") or match.get("change_rate") or 0,
                 })
-        return {
-            "theme": theme,
-            "trajectory": traj,
-            "source": "kpl",
-            "data_status": "ok" if traj else "empty",
-        }
+        return wrap_contract(
+            traj,
+            source="kpl",
+            status="real" if traj else "empty",
+            theme=theme,
+            trajectory=traj,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"题材复盘失败: {e}")

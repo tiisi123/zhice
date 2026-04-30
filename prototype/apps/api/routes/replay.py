@@ -8,6 +8,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.analysis import build_next_day_strategy
 from packages.features.market import build_market_summary
@@ -84,34 +85,6 @@ def _prev_trade_date(hist_keys: list[str], today: str) -> Optional[str]:
     return earlier[-1] if earlier else None
 
 
-def _now_text() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _meta(trade_date: str, total: int, data_status: str = "ok", message: str = "") -> dict:
-    return {
-        "trade_date": trade_date,
-        "updated_at": _now_text(),
-        "source": "kpl",
-        "data_status": data_status,
-        "mock": False,
-        "total": total,
-        "message": message,
-    }
-
-
-def _unavailable(trade_date: str, message: str) -> dict:
-    return {
-        "trade_date": trade_date,
-        "updated_at": _now_text(),
-        "source": "kpl",
-        "data_status": "unavailable",
-        "mock": False,
-        "total": 0,
-        "message": message,
-    }
-
-
 @router.get("/summary")
 def market_summary(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
@@ -122,7 +95,6 @@ def market_summary(date: Optional[str] = Query(None)):
         summary = build_market_summary(kpl_stats, limit_up, broken)
         total = len(limit_up or []) + len(broken or [])
         status_total = total or len(kpl_stats or [])
-        summary.update(_meta(trade_date, total, "ok" if status_total else "empty"))
         # 快照（供次日 Δ 对比）
         _snapshot_summary(trade_date, summary)
         # 注入昨日对比
@@ -131,9 +103,23 @@ def market_summary(date: Optional[str] = Query(None)):
         if prev_date:
             summary["prev_date"] = prev_date
             summary["prev"] = hist.get(prev_date, {})
-        return summary
+        return wrap_contract(
+            summary,
+            source="kpl",
+            status="real" if status_total else "empty",
+            trade_date=trade_date,
+            total=total,
+            **summary,
+        )
     except Exception as e:
-        return _unavailable(trade_date, f"获取市场概览失败: {str(e)}")
+        return wrap_contract(
+            {},
+            source="kpl",
+            status="unavailable",
+            message=f"获取市场概览失败: {str(e)}",
+            trade_date=trade_date,
+            total=0,
+        )
 
 
 @router.get("/ladder")
@@ -147,14 +133,24 @@ def board_ladder(date: Optional[str] = Query(None)):
             result[tier_name] = identify_leader(stocks)
         # 快照（供接力率计算）
         _snapshot_ladder(trade_date, result)
-        return {
-            **_meta(trade_date, len(data or []), "ok" if data else "empty"),
-            "tiers": result,
-        }
+        return wrap_contract(
+            result,
+            source="kpl",
+            status="real" if data else "empty",
+            trade_date=trade_date,
+            total=len(data or []),
+            tiers=result,
+        )
     except Exception as e:
-        payload = _unavailable(trade_date, f"获取连板天梯失败: {str(e)}")
-        payload["tiers"] = {}
-        return payload
+        return wrap_contract(
+            {},
+            source="kpl",
+            status="unavailable",
+            message=f"获取连板天梯失败: {str(e)}",
+            trade_date=trade_date,
+            total=0,
+            tiers={},
+        )
 
 
 @router.get("/ladder-relay")

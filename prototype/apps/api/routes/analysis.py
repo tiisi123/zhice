@@ -9,15 +9,12 @@ from pydantic import BaseModel
 
 from apps.api.auth import current_user
 from apps.api.db import execute, query_all, query_one
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.analysis import build_broken_case, recommend_strategy
 
 router = APIRouter()
 _kpl = get_kpl()
-
-
-def _now_text() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
 @router.get("/broken-cases")
@@ -31,26 +28,25 @@ def broken_cases(date: Optional[str] = Query(None)):
         for c in cases:
             by_reason.setdefault(c["reason_type"], []).append(c)
 
-        return {
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "total": len(cases),
-            "by_reason": {k: {"count": len(v), "cases": v} for k, v in by_reason.items()},
-            "mock": False,
-            "source": "kpl",
-            "data_status": "ok" if cases else "empty",
-        }
+        by_reason_grouped = {k: {"count": len(v), "cases": v} for k, v in by_reason.items()}
+        return wrap_contract(
+            cases,
+            source="kpl",
+            status="real" if cases else "empty",
+            trade_date=trade_date,
+            total=len(cases),
+            by_reason=by_reason_grouped,
+        )
     except Exception as e:
-        return {
-            "trade_date": trade_date,
-            "updated_at": _now_text(),
-            "total": 0,
-            "by_reason": {},
-            "mock": False,
-            "source": "kpl",
-            "data_status": "unavailable",
-            "message": f"获取炸板案例失败: {str(e)}",
-        }
+        return wrap_contract(
+            [],
+            source="kpl",
+            status="unavailable",
+            message=f"获取炸板案例失败: {str(e)}",
+            trade_date=trade_date,
+            total=0,
+            by_reason={},
+        )
 
 
 @router.get("/strategy-recommend")
