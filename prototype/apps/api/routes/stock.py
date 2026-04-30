@@ -5,6 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, HTTPException
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.pattern_match import (
     aggregate_outlook,
@@ -32,13 +33,13 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
         hot_stocks = _kpl.get_hot_stocks(date)
 
         stock_info = None
-        source = None
+        match_source = None
 
         # 在涨停池中查找
         for s in limit_up:
             if s.get("stock_code", "")[:6] == code[:6]:
                 stock_info = s
-                source = "limit_up"
+                match_source = "limit_up"
                 break
 
         # 在炸板池中查找
@@ -46,7 +47,7 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
             for s in broken:
                 if s.get("stock_code", "")[:6] == code[:6]:
                     stock_info = s
-                    source = "broken"
+                    match_source = "broken"
                     break
 
         # 在热股中查找
@@ -54,20 +55,21 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
             for s in hot_stocks:
                 if s.get("stock_code", "")[:6] == code[:6]:
                     stock_info = s
-                    source = "hot"
+                    match_source = "hot"
                     break
 
         if not stock_info:
-            return {
-                "code": code,
-                "found": False,
-                "mock": False,
-                "source": "kpl",
-                "data_status": "empty",
-                "message": "该股票今日不在涨停/炸板/热股池中",
-                "themes": [],
-                "capital_flow": None,
-            }
+            return wrap_contract(
+                {},
+                source="kpl",
+                status="empty",
+                mock=False,
+                message="该股票今日不在涨停/炸板/热股池中",
+                code=code,
+                found=False,
+                themes=[],
+                capital_flow=None,
+            )
 
         # 获取关联题材
         related_plates = stock_info.get("related_plates", [])
@@ -105,10 +107,9 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
                     if len(linked_stocks) >= 5:
                         break
 
-        return {
+        payload = {
             "code": code,
             "found": True,
-            "source": source,
             "name": stock_info.get("stock_name", ""),
             "change_rate": change_rate,
             "board_count": board_count,
@@ -118,14 +119,20 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
             "themes": {
                 "main_theme": first_plate,
                 "related_plates": related_plates,
-                "hot_score": min(100, len(related_plates) * 15 + board_count * 20 + (30 if source == "limit_up" else 0)),
+                "hot_score": min(100, len(related_plates) * 15 + board_count * 20 + (30 if match_source == "limit_up" else 0)),
             },
             "capital_flow": capital_flow,
             "linked_stocks": linked_stocks,
-            "kline_label": f"{'连板' + str(board_count) if board_count > 1 else '首板' if source == 'limit_up' else '炸板' if source == 'broken' else '热股'}",
-            "mock": False,
-            "data_status": "ok",
+            "kline_label": f"{'连板' + str(board_count) if board_count > 1 else '首板' if match_source == 'limit_up' else '炸板' if match_source == 'broken' else '热股'}",
+            "match_source": match_source,
         }
+        return wrap_contract(
+            payload,
+            source="kpl",
+            status="real",
+            mock=False,
+            **payload,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取个股详情失败: {str(e)}")
 
@@ -160,7 +167,14 @@ def stock_themes(code: str, date: Optional[str] = Query(None)):
             if len(matched) >= 10:
                 break
 
-        return {"code": code, "themes": matched, "count": len(matched)}
+        return wrap_contract(
+            matched,
+            source="kpl",
+            status="real" if matched else "empty",
+            code=code,
+            themes=matched,
+            count=len(matched),
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取个股题材失败: {str(e)}")
 
@@ -176,43 +190,49 @@ def stock_pattern_match(code: str, top_k: int = Query(5, ge=1, le=10)):
 
         ts = get_tushare()
         if not ts.configured:
-            return {
-                "code": code,
-                "query_seq": [],
-                "matches": [],
-                "outlook": {},
-                "source": "tushare_daily",
-                "data_status": "unavailable",
-                "message": "TUSHARE_TOKEN 未配置，无法获取真实历史 K 线",
-                "disclaimer": "形态匹配仅供参考，过往走势不代表未来收益。",
-            }
+            return wrap_contract(
+                [],
+                source="tushare_daily",
+                status="unavailable",
+                mock=False,
+                message="TUSHARE_TOKEN 未配置，无法获取真实历史 K 线",
+                code=code,
+                query_seq=[],
+                matches=[],
+                outlook={},
+                disclaimer="形态匹配仅供参考，过往走势不代表未来收益。",
+            )
         rows = ts.get_daily(_to_ts_code(code), limit=30)
         closes = [float(r.get("close") or 0) for r in rows if float(r.get("close") or 0) > 0]
         if len(closes) < 20:
-            return {
-                "code": code,
-                "query_seq": [],
-                "matches": [],
-                "outlook": {},
-                "source": "tushare_daily",
-                "data_status": "empty",
-                "message": "真实历史 K 线不足，无法进行形态匹配",
-                "disclaimer": "形态匹配仅供参考，过往走势不代表未来收益。",
-            }
+            return wrap_contract(
+                [],
+                source="tushare_daily",
+                status="empty",
+                mock=False,
+                message="真实历史 K 线不足，无法进行形态匹配",
+                code=code,
+                query_seq=[],
+                matches=[],
+                outlook={},
+                disclaimer="形态匹配仅供参考，过往走势不代表未来收益。",
+            )
 
         base = closes[0]
         query_seq = [((v / base) - 1) * 100 for v in closes]
         matches = match_patterns(query_seq, top_k=top_k)
         outlook = aggregate_outlook(matches)
 
-        return {
-            "code": code,
-            "query_seq": [round(v, 2) for v in query_seq],
-            "matches": matches,
-            "outlook": outlook,
-            "source": "tushare_daily",
-            "data_status": "ok",
-            "disclaimer": "形态匹配仅供参考，过往走势不代表未来收益。",
-        }
+        return wrap_contract(
+            matches,
+            source="tushare_daily",
+            status="real",
+            mock=False,
+            code=code,
+            query_seq=[round(v, 2) for v in query_seq],
+            matches=matches,
+            outlook=outlook,
+            disclaimer="形态匹配仅供参考，过往走势不代表未来收益。",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"K线形态匹配失败: {str(e)}")

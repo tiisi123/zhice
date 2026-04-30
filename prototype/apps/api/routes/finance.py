@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel, Field
 
+from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_dfcf
 
 logger = logging.getLogger(__name__)
@@ -24,20 +25,33 @@ router = APIRouter()
 _dfcf = get_dfcf()
 
 
-def _meta(source: str, data_status: str, sample_mode: bool = False, message: str = "") -> dict:
+def _safe_extras(data: dict) -> dict:
+    """剥离与 wrap_contract 显式 kwargs 冲突的键，避免 TypeError。"""
     return {
-        "source": source,
-        "data_status": data_status,
-        "mock": sample_mode,
-        "message": message,
+        k: v for k, v in data.items()
+        if k not in ("source", "data_status", "mock", "message", "updated_at")
     }
 
 
 @router.get("/quote/{code}")
 def quote(code: str):
     data = _dfcf.get_quote(code)
-    status = "unavailable" if data.get("error") else ("empty" if not data else "ok")
-    return {**data, **_meta("dfcf", status, message=data.get("error", ""))}
+    if data.get("error"):
+        return wrap_contract(
+            data,
+            source="dfcf",
+            status="unavailable",
+            mock=False,
+            message=data.get("error", ""),
+            **_safe_extras(data),
+        )
+    return wrap_contract(
+        data,
+        source="dfcf",
+        status="real" if data else "empty",
+        mock=False,
+        **_safe_extras(data),
+    )
 
 
 @router.get("/summary/{code}")
@@ -50,10 +64,14 @@ def summary(code: str, n: int = Query(8, ge=1, le=24)):
 
             ts_data = get_tushare().get_financial_summary(code, n_periods=n)
             if ts_data.get("periods"):
-                return {
-                    **ts_data,
-                    **_meta("tushare", "ok", message="东方财富异常，已使用 TuShare 财务摘要补充"),
-                }
+                return wrap_contract(
+                    ts_data,
+                    source="tushare",
+                    status="fallback",
+                    mock=False,
+                    message="东方财富异常，已使用 TuShare 财务摘要补充",
+                    **_safe_extras(ts_data),
+                )
         except Exception:
             pass
         raise HTTPException(status_code=502, detail=f"上游异常: {data['error']}")
@@ -63,16 +81,23 @@ def summary(code: str, n: int = Query(8, ge=1, le=24)):
 
             ts_data = get_tushare().get_financial_summary(code, n_periods=n)
             if ts_data.get("periods"):
-                return {
-                    **ts_data,
-                    **_meta("tushare", "ok", message="东方财富无摘要数据，已使用 TuShare 财务摘要补充"),
-                }
+                return wrap_contract(
+                    ts_data,
+                    source="tushare",
+                    status="fallback",
+                    mock=False,
+                    message="东方财富无摘要数据，已使用 TuShare 财务摘要补充",
+                    **_safe_extras(ts_data),
+                )
         except Exception:
             pass
-    return {
-        **data,
-        **_meta("dfcf", "ok" if data.get("periods") else "empty"),
-    }
+    return wrap_contract(
+        data,
+        source="dfcf",
+        status="real" if data.get("periods") else "empty",
+        mock=False,
+        **_safe_extras(data),
+    )
 
 
 @router.get("/profile/{code}")
@@ -88,16 +113,29 @@ def profile(code: str):
             quote_data = _dfcf.get_quote(code) or {}
         except Exception:
             quote_data = {}
-        return {
+        fallback_payload = {
             "code": code,
             "name": quote_data.get("name") or code,
             "industry": quote_data.get("industry") or "—",
             "summary": "",
             "data_source": "fallback",
             "warning": f"公司简介暂不可用：{data['error']}",
-            **_meta("dfcf_profile_fallback", "partial", message=f"公司简介暂不可用：{data['error']}"),
         }
-    return {**data, **_meta("dfcf", "ok" if data else "empty")}
+        return wrap_contract(
+            fallback_payload,
+            source="dfcf_profile_fallback",
+            status="fallback",
+            mock=False,
+            message=f"公司简介暂不可用：{data['error']}",
+            **_safe_extras(fallback_payload),
+        )
+    return wrap_contract(
+        data,
+        source="dfcf",
+        status="real" if data else "empty",
+        mock=False,
+        **_safe_extras(data),
+    )
 
 
 @router.get("/announcements/{code}")
@@ -107,13 +145,29 @@ def announcements(
     kind: Optional[str] = Query(None, description="report/earnings/contract/shareholder/all"),
 ):
     items = _dfcf.get_announcements(code, days=days, kind=kind)
-    return {"code": code, "items": items, "count": len(items), **_meta("dfcf", "ok" if items else "empty")}
+    return wrap_contract(
+        items,
+        source="dfcf",
+        status="real" if items else "empty",
+        mock=False,
+        code=code,
+        items=items,
+        count=len(items),
+    )
 
 
 @router.get("/research-reports/{code}")
 def research_reports(code: str, n: int = Query(20, ge=1, le=50)):
     items = _dfcf.get_research_reports(code, n=n)
-    return {"code": code, "items": items, "count": len(items), **_meta("dfcf", "ok" if items else "empty")}
+    return wrap_contract(
+        items,
+        source="dfcf",
+        status="real" if items else "empty",
+        mock=False,
+        code=code,
+        items=items,
+        count=len(items),
+    )
 
 
 # ============== 多公司对比（PRD：M4D-04 / M4D-06 复合能力） ==============
@@ -167,18 +221,22 @@ def compare(inp: CompareIn):
     valid_pe = [r for r in rows if (r.get("pe_ttm") or 0) > 0]
     rankings["pe_ttm_low"] = [r["code"] for r in sorted(valid_pe, key=lambda r: r["pe_ttm"])]
 
-    return {
-        "rows": rows,
-        "rankings": rankings,
-        "metric_labels": {
+    return wrap_contract(
+        rows,
+        source="dfcf+compare_rule",
+        status="real" if rows else "empty",
+        mock=False,
+        message="多公司对比为东方财富数据汇总和规则排名",
+        rows=rows,
+        rankings=rankings,
+        metric_labels={
             "roe": "净资产收益率(%)",
             "yoy_revenue": "营收同比(%)",
             "yoy_profit": "净利润同比(%)",
             "gross_margin": "销售毛利率(%)",
             "pe_ttm_low": "PE-TTM（越低越好）",
         },
-        **_meta("dfcf+compare_rule", "ok" if rows else "empty", message="多公司对比为东方财富数据汇总和规则排名"),
-    }
+    )
 
 
 # ============== AI 财报解读（PRD M4D-02 / M4D-05 雏形） ==============
@@ -230,14 +288,18 @@ def explain_report(inp: ExplainIn):
 """
     try:
         text = llm.chat(prompt)
-        return {
-            "code": inp.code,
-            "name": inp.name,
-            "period": inp.period,
-            "analysis": text,
-            "disclaimer": "AI 生成内容仅供参考，基于公开文本推演，不构成投资建议。",
-            **_meta("user_text+llm", "ok", message="AI 解读基于用户输入文本"),
-        }
+        return wrap_contract(
+            text,
+            source="user_text+llm",
+            status="real",
+            mock=False,
+            message="AI 解读基于用户输入文本",
+            code=inp.code,
+            name=inp.name,
+            period=inp.period,
+            analysis=text,
+            disclaimer="AI 生成内容仅供参考，基于公开文本推演，不构成投资建议。",
+        )
     except Exception as e:
         logger.exception("explain_report failed")
         raise HTTPException(status_code=500, detail=f"AI 解读失败: {e}")
@@ -285,15 +347,19 @@ async def extract_pdf(file: UploadFile = File(...)):
     if len(text) > _MAX_TEXT_CHARS:
         text = text[:_MAX_TEXT_CHARS]
         truncated = True
-    return {
-        "filename": file.filename,
-        "size": len(content),
-        "char_count": len(text),
-        "truncated": truncated,
-        "text": text,
-        "warning": "未识别到文本（可能是扫描件 PDF）" if not text else None,
-        **_meta("uploaded_pdf+pypdf", "ok" if text else "empty", message="PDF 文本抽取结果"),
-    }
+    return wrap_contract(
+        text,
+        source="uploaded_pdf+pypdf",
+        status="real" if text else "empty",
+        mock=False,
+        message="PDF 文本抽取结果",
+        filename=file.filename,
+        size=len(content),
+        char_count=len(text),
+        truncated=truncated,
+        text=text,
+        warning="未识别到文本（可能是扫描件 PDF）" if not text else None,
+    )
 
 
 @router.post("/explain-pdf")
@@ -320,8 +386,19 @@ async def explain_pdf(
     # 截断喂给 LLM（保留前 6000 字，符合 prompt 约束）
     sample = text[:_MAX_TEXT_CHARS]
     inp = ExplainIn(code=code, name=name, period=period, text=sample)
-    result = explain_report(inp)
-    result["extracted_text_preview"] = sample[:2000]
-    result["full_char_count"] = len(text)
-    result.update(_meta("uploaded_pdf+pypdf+llm", "ok", message="AI 解读基于上传 PDF 抽取文本"))
-    return result
+    base = explain_report(inp)
+    # base 是 wrap_contract 产物；扩展额外字段后重新走 wrap_contract，保证响应仍为 D004 契约
+    extras = {
+        k: v for k, v in base.items()
+        if k not in ("data", "source", "data_status", "mock", "message", "updated_at")
+    }
+    return wrap_contract(
+        base.get("data"),
+        source="uploaded_pdf+pypdf+llm",
+        status="real",
+        mock=False,
+        message="AI 解读基于上传 PDF 抽取文本",
+        **extras,
+        extracted_text_preview=sample[:2000],
+        full_char_count=len(text),
+    )

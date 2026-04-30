@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 
+from apps.api.utils.contract import wrap_contract
 from packages.backtest.dsl_schema import StrategyDSL, STRATEGY_TEMPLATES
 from packages.backtest.engine import BacktestDataUnavailable
 from packages.backtest.optimizer import ParameterOptimizer, SimulatedTrader
@@ -20,24 +21,31 @@ def optimize_strategy(template_name: str = Query("涨停次日高开"), years: i
         raise HTTPException(status_code=404, detail=f"模板 '{template_name}' 不存在")
     try:
         results = _optimizer.grid_search(dsl, years=years)
-        return {
+        payload = {
             "template": template_name,
             "total_combinations": len(results),
             "best_5": results[:5],
             "worst_3": results[-3:],
-            "source": "tushare",
-            "data_status": "ok",
         }
+        return wrap_contract(
+            results,
+            source="tushare",
+            status="real" if results else "empty",
+            mock=False,
+            **payload,
+        )
     except BacktestDataUnavailable as e:
-        return {
-            "template": template_name,
-            "total_combinations": 0,
-            "best_5": [],
-            "worst_3": [],
-            "source": "tushare",
-            "data_status": "unavailable",
-            "message": str(e),
-        }
+        return wrap_contract(
+            [],
+            source="tushare",
+            status="unavailable",
+            mock=False,
+            message=str(e),
+            template=template_name,
+            total_combinations=0,
+            best_5=[],
+            worst_3=[],
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"参数优化失败: {str(e)}")
 
