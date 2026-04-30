@@ -578,7 +578,82 @@ class InvestmentMemo(Base):
 
 
 # --------------------------------------------------------------------------- #
-# 模型清单（与 db.py 内联 SQL 1:1 对齐 — 27 张表）                              #
+# S03/T03 — 系统密钥 + 系统告警                                                 #
+# --------------------------------------------------------------------------- #
+
+
+class SystemSecret(Base):
+    """Encrypted secret store. T03/S03: KPL Cookie persisted as Fernet ciphertext.
+
+    ``secret_type`` is the c1→c2 upgrade hook: c1 ships with a single
+    ``'cookie'`` row shared across realtime/history/merge KPL hosts; c2 (if
+    staging shows host-specific 401/403) introduces ``'cookie_realtime'`` /
+    ``'cookie_history'`` rows without further migration.
+
+    NEVER expose ``secret_value`` outside ``apps.api.services.cookie_provider``.
+    Admin metadata endpoints return ``has_cookie`` boolean only.
+    """
+
+    __tablename__ = "system_secrets"
+    __table_args__ = (MYSQL_TABLE_ARGS,)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    secret_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # MySQL 8.0 requires parenthesized DEFAULT for TEXT/BLOB/JSON (errno 1101).
+    secret_value: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("(_utf8mb4'')")
+    )
+    secret_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="cookie", server_default="cookie"
+    )
+    updated_at: Mapped["DateTime"] = mapped_column(
+        DateTime(timezone=False),
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+        nullable=False,
+    )
+    # Soft FK to users.id (no DB-level constraint; matches all other user_id
+    # columns in this schema). Nullable because the seed row is written by the
+    # migration before any admin user exists.
+    updated_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class SystemAlert(Base):
+    """Health-probe alert log. T03/S03: written by APScheduler 30min jobs.
+
+    ``kind`` partitions alert streams (``kpl_cookie``, ``kpl_realtime``,
+    ``kpl_history``, ``smtp``). ``resolved_at`` distinguishes open vs resolved
+    incidents; the composite index supports the ``unresolved=1`` admin filter.
+    """
+
+    __tablename__ = "system_alerts"
+    __table_args__ = (
+        Index("idx_system_alerts_kind_resolved", "kind", "resolved_at"),
+        MYSQL_TABLE_ARGS,
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    level: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="warning", server_default="warning"
+    )
+    message: Mapped[str] = mapped_column(
+        String(500), nullable=False, default="", server_default=""
+    )
+    # JSON-as-text — see file-level docstring on the parenthesized default.
+    meta: Mapped[str] = mapped_column(
+        Text, nullable=False, default="{}", server_default=_JSON_OBJ_DEFAULT
+    )
+    resolved_at: Mapped["DateTime | None"] = mapped_column(
+        DateTime(timezone=False), nullable=True
+    )
+    created_at: Mapped["DateTime"] = mapped_column(
+        DateTime(timezone=False), server_default=func.current_timestamp(), nullable=False
+    )
+
+
+# --------------------------------------------------------------------------- #
+# 模型清单（27 张 S01 baseline + 2 张 S03/T03 = 29 张）                         #
 # --------------------------------------------------------------------------- #
 
 ALL_MODELS: tuple[type[Base], ...] = (
@@ -609,6 +684,8 @@ ALL_MODELS: tuple[type[Base], ...] = (
     EtfMapping,
     SimilarDayCase,
     InvestmentMemo,
+    SystemSecret,
+    SystemAlert,
 )
 
-assert len(ALL_MODELS) == 27, "T03 contract: db_models must define exactly 27 tables"
+assert len(ALL_MODELS) == 29, "S03/T03 contract: db_models must define exactly 29 tables"

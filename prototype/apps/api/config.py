@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     zhice_admin_password: str = ""
     database_url: str = ""
 
+    # T03 (M001/S03): Fernet 32-byte url-safe base64 key (cryptography.fernet
+    # .Fernet.generate_key()). Required in production — empty key means we
+    # cannot decrypt the persisted KPL Cookie, blocking every short-line route.
+    encryption_key: str = ""
+
+    # T04 (M001/S03): SMTP credentials for cookie-failure alert mail. NOT
+    # added to validate_required_secrets — SMTP is allowed to fall back
+    # gracefully (M001-CONTEXT decision: alert mail failure should not block
+    # API startup). Empty smtp_host disables alert send entirely.
+    smtp_host: str = ""
+    smtp_port: int = 465
+    smtp_user: str = ""
+    smtp_pass: str = ""
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, v: Any) -> bool:
@@ -95,6 +109,7 @@ class Settings(BaseSettings):
             ("ZHICE_JWT_SECRET", self.zhice_jwt_secret),
             ("ZHICE_ADMIN_PASSWORD", self.zhice_admin_password),
             ("DATABASE_URL", self.database_url),
+            ("ENCRYPTION_KEY", self.encryption_key),
         )
         missing = [name for name, value in required if not value.strip()]
 
