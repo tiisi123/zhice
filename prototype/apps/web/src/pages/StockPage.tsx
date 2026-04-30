@@ -1,0 +1,296 @@
+import { useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { Card, Col, Row, Tag, Empty, Spin, Input, Button, Space, Statistic, Progress, Table, Alert } from 'antd'
+import { RobotOutlined, SearchOutlined, ThunderboltOutlined, DollarOutlined, TeamOutlined, LineChartOutlined } from '@ant-design/icons'
+import Markdown from 'react-markdown'
+import { Link } from 'react-router-dom'
+import * as echarts from 'echarts'
+import { fetchApi } from '../api/client'
+import { askAI } from '../api/copilot'
+import AIDisclaimer from '../components/AIDisclaimer'
+import MockBanner from '../components/MockBanner'
+import { watchlistApi } from '../api/watchlist'
+import { message as antMessage } from 'antd'
+import { StarOutlined } from '@ant-design/icons'
+
+const LABEL_COLORS: Record<string, string> = {
+  '首板': '#fa8c16', '连板': '#f5222d', '炸板': '#faad14', '热股': '#1677ff',
+}
+
+function StockIdentity({ data }: { data: any }) {
+  const label = data.kline_label || '—'
+  const bc = data.board_count || 0
+  const cr = data.change_rate || 0
+  const bgColor = bc >= 3 ? 'linear-gradient(135deg,#991b1b,#ef4444)' : bc >= 1 ? 'linear-gradient(135deg,#c2410c,#fb923c)' : cr >= 5 ? 'linear-gradient(135deg,#b45309,#f59e0b)' : 'linear-gradient(135deg,#374151,#6b7280)'
+
+  return (
+    <div style={{ background: bgColor, color: '#fff', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 32, fontWeight: 800 }}>{data.name}</span>
+        <span style={{ fontSize: 16, opacity: 0.8 }}>{data.code}</span>
+        <Tag color={LABEL_COLORS[label.includes('连板') ? '连板' : label] || '#666'} style={{ fontSize: 14, padding: '2px 10px' }}>{label}</Tag>
+      </div>
+      <div style={{ marginTop: 12, display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 15 }}>
+        <span>涨幅 <b style={{ fontSize: 22 }}>{cr >= 0 ? '+' : ''}{cr.toFixed(2)}%</b></span>
+        {bc > 0 && <span>连板 <b style={{ fontSize: 22 }}>{bc}</b> 板</span>}
+        <span>封板 <b>{data.time || '—'}</b></span>
+      </div>
+    </div>
+  )
+}
+
+function ReasonCard({ data }: { data: any }) {
+  return (
+    <Card title={<span><ThunderboltOutlined style={{ color: '#fa8c16' }} /> 涨停解码</span>} size="small" style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 14, lineHeight: 2 }}>
+        <div><b>核心催化：</b>{data.reason || '—'}</div>
+        <div>
+          <b>所属题材：</b>
+          {data.themes?.related_plates?.length > 0
+            ? data.themes.related_plates.map((p: string, i: number) => (
+                <Link key={i} to={`/theme?name=${encodeURIComponent(p)}`}><Tag color="blue" style={{ cursor: 'pointer' }}>{p}</Tag></Link>
+              ))
+            : '—'}
+        </div>
+        <div><b>主题材：</b><Tag color="orange">{data.themes?.main_theme || '—'}</Tag> · 热度 <b style={{ color: '#f5222d' }}>{data.themes?.hot_score || 0}</b></div>
+      </div>
+    </Card>
+  )
+}
+
+function CapitalCard({ cf }: { cf: any }) {
+  if (!cf) return <Card size="small"><Empty description="暂无资金数据" /></Card>
+  const turnover = cf.turnover_ratio || 0
+  const cap = cf.non_restricted_capital || 0
+  const net = cf.estimated_net_inflow || 0
+
+  return (
+    <Card title={<span><DollarOutlined style={{ color: '#1677ff' }} /> 资金画像</span>} size="small" style={{ marginBottom: 16 }}>
+      <Row gutter={[12, 12]}>
+        <Col span={12}>
+          <div style={{ fontSize: 12, color: '#999' }}>换手率</div>
+          <Progress percent={Math.min(turnover, 30) / 30 * 100} showInfo={false} strokeColor={turnover > 15 ? '#fa8c16' : '#1677ff'} size="small" />
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{turnover.toFixed(1)}%</div>
+        </Col>
+        <Col span={12}>
+          <Statistic title="流通市值" value={cap > 0 ? (cap / 1e8).toFixed(1) : '—'} suffix="亿" valueStyle={{ fontSize: 16 }} />
+        </Col>
+        <Col span={12}>
+          <Statistic title="估算净流入" value={net ? (net / 1e4).toFixed(0) : '—'} suffix="万" valueStyle={{ color: net > 0 ? '#f5222d' : '#52c41a', fontSize: 16 }} />
+        </Col>
+        <Col span={12}>
+          <Statistic title="总市值" value={cf.total_capital > 0 ? (cf.total_capital / 1e8).toFixed(1) : '—'} suffix="亿" valueStyle={{ fontSize: 16 }} />
+        </Col>
+      </Row>
+    </Card>
+  )
+}
+
+// PRD M4A-06: 强势股模式匹配
+function PatternMatchCard({ code, name }: { code: string; name: string }) {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const chartRef = useRef<HTMLDivElement>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!code) return
+    setLoading(true)
+    fetchApi<any>(`/stock/${code}/pattern-match?top_k=5`)
+      .then(r => { setData(r); setSelectedId(r?.matches?.[0]?.id || null) })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false))
+  }, [code])
+
+  useEffect(() => {
+    if (!chartRef.current || !data?.query_seq) return
+    const selected = (data.matches || []).find((m: any) => m.id === selectedId) || data.matches?.[0]
+    const chart = echarts.init(chartRef.current)
+    chart.setOption({
+      tooltip: { trigger: 'axis' },
+      legend: { data: ['当前个股', selected ? selected.name : '历史相似'], textStyle: { fontSize: 11 } },
+      grid: { left: 40, right: 20, top: 32, bottom: 30 },
+      xAxis: { type: 'category', data: Array.from({ length: data.query_seq.length }, (_, i) => `D${i + 1}`), axisLabel: { fontSize: 9 } },
+      yAxis: { type: 'value', name: '%', axisLabel: { fontSize: 10 } },
+      series: [
+        { name: '当前个股', type: 'line', data: data.query_seq, smooth: true, lineStyle: { color: '#1677ff', width: 2 }, itemStyle: { color: '#1677ff' } },
+        ...(selected ? [{ name: selected.name, type: 'line' as const, data: selected.seq, smooth: true, lineStyle: { color: '#f5222d', width: 2, type: 'dashed' as const }, itemStyle: { color: '#f5222d' } }] : []),
+      ],
+    })
+    const onResize = () => chart.resize()
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); chart.dispose() }
+  }, [data, selectedId])
+
+  return (
+    <Card
+      title={<span><LineChartOutlined style={{ color: '#f5222d' }} /> K 线形态匹配（M4A-06）</span>}
+      size="small" style={{ marginBottom: 16 }}
+      extra={<Button size="small" type="link" icon={<RobotOutlined />}
+        onClick={() => askAI(`${name}(${code}) 当前 K 线形态最相似的历史牛股是 ${data?.matches?.[0]?.stock}，相似度 ${data?.matches?.[0]?.similarity}%。分析两者的相似点与差异，给出操作建议。`)}>AI 解读</Button>}
+    >
+      {loading ? <Spin /> : !data || !data.matches?.length ? <Empty description={data?.message || '暂无形态匹配数据'} /> : (
+        <>
+          <div ref={chartRef} style={{ width: '100%', height: 240 }} />
+          {data.outlook && (
+            <Alert
+              type="info" showIcon style={{ margin: '8px 0' }}
+              message={<>
+                Top {data.matches.length} 历史相似形态加权预测：
+                <b style={{ color: '#f5222d' }}> 5 日 {data.outlook.expected_d5 >= 0 ? '+' : ''}{data.outlook.expected_d5}%</b> ·
+                <b style={{ color: '#f5222d' }}> 10 日 {data.outlook.expected_d10 >= 0 ? '+' : ''}{data.outlook.expected_d10}%</b> ·
+                <b style={{ color: '#f5222d' }}> 20 日 {data.outlook.expected_d20 >= 0 ? '+' : ''}{data.outlook.expected_d20}%</b>
+                {' · '}胜率 <b>{data.outlook.avg_win_rate}%</b>
+              </>}
+            />
+          )}
+          <Table
+            size="small" pagination={false} rowKey="id"
+            dataSource={data.matches}
+            onRow={(r: any) => ({ onClick: () => setSelectedId(r.id), style: { cursor: 'pointer', background: r.id === selectedId ? '#fff7e6' : undefined } })}
+            columns={[
+              { title: '形态', dataIndex: 'name', width: 130 },
+              { title: '历史样本', dataIndex: 'stock', width: 120 },
+              { title: '相似度', dataIndex: 'similarity', width: 80, render: (v: number) => <Tag color={v >= 80 ? 'red' : v >= 60 ? 'orange' : 'default'}>{v}%</Tag> },
+              { title: '5日', dataIndex: ['future', 'd5'], width: 60, align: 'right' as const, render: (v: number) => <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>{v >= 0 ? '+' : ''}{v}%</span> },
+              { title: '10日', dataIndex: ['future', 'd10'], width: 60, align: 'right' as const, render: (v: number) => <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>{v >= 0 ? '+' : ''}{v}%</span> },
+              { title: '20日', dataIndex: ['future', 'd20'], width: 60, align: 'right' as const, render: (v: number) => <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>{v >= 0 ? '+' : ''}{v}%</span> },
+              { title: '胜率', dataIndex: ['future', 'win_rate'], width: 60, align: 'right' as const, render: (v: number) => `${v}%` },
+            ]}
+          />
+          <AIDisclaimer variant="inline" />
+        </>
+      )}
+    </Card>
+  )
+}
+
+function LinkedStocks({ stocks }: { stocks: any[] }) {
+  if (!stocks || stocks.length === 0) return null
+  return (
+    <Card title={<span><TeamOutlined style={{ color: '#722ed1' }} /> 同题材联动</span>} size="small" style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {stocks.map(s => (
+          <Link key={s.code} to={`/stock/${s.code}`}>
+            <Tag color={s.board_count >= 2 ? 'red' : s.board_count >= 1 ? 'orange' : 'default'} style={{ fontSize: 13, padding: '4px 10px' }}>
+              {s.name} {s.board_count > 0 ? `${s.board_count}板` : ''}
+              <span style={{ color: s.change_rate >= 0 ? '#f5222d' : '#52c41a', marginLeft: 6 }}>{(s.change_rate || 0).toFixed(2)}%</span>
+            </Tag>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
+export default function StockPage() {
+  const { code: routeCode } = useParams()
+  const [code, setCode] = useState(routeCode || '600519')
+  const [inputCode, setInputCode] = useState(routeCode || '600519')
+  const [data, setData] = useState<any>(null)
+  const [insight, setInsight] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [insightLoading, setInsightLoading] = useState(false)
+
+  const load = async (c: string) => {
+    if (!c.trim()) return
+    setLoading(true); setInsight(null)
+    try {
+      const detail = await fetchApi<any>(`/stock/${c}`)
+      setData(detail)
+    } catch { setData(null) }
+    setLoading(false)
+  }
+
+  useEffect(() => { if (routeCode) { setCode(routeCode); setInputCode(routeCode) } }, [routeCode])
+  useEffect(() => { if (code) load(code) }, [code])
+
+  useEffect(() => {
+    if (data?.found && code) {
+      setInsightLoading(true)
+      fetchApi<any>(`/ai/stock-insight/${code}`)
+        .then(r => setInsight(r.report))
+        .catch(() => setInsight(null))
+        .finally(() => setInsightLoading(false))
+    }
+  }, [data, code])
+
+  if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <h2 style={{ margin: 0 }}>个股分析</h2>
+        <Input
+          value={inputCode} onChange={e => setInputCode(e.target.value)}
+          onPressEnter={() => setCode(inputCode)}
+          style={{ width: 130 }} placeholder="股票代码" prefix={<SearchOutlined />}
+        />
+        <Button type="primary" onClick={() => setCode(inputCode)}>查询</Button>
+        {data?.found && (
+          <Button
+            icon={<StarOutlined />}
+            onClick={async () => {
+              try {
+                await watchlistApi.add({
+                  code: data.code, name: data.name || '',
+                  alert_limit_up: true, alert_broken: true,
+                })
+                antMessage.success(`已加入研究池：${data.name || data.code}`)
+              } catch (e: any) {
+                if (String(e?.message || '').includes('已在')) antMessage.info('该股票已在研究池中')
+                else antMessage.error('加入失败，请确认已登录')
+              }
+            }}
+          >加入研究池</Button>
+        )}
+        <MockBanner show={!!data?.mock} />
+      </div>
+
+      {!data && <Card><Empty description="请输入股票代码后查询" /></Card>}
+      {data && !data.found && <Card><Empty description={data.message || '未找到该股票数据'} /></Card>}
+
+      {data?.found && (
+        <>
+          <StockIdentity data={data} />
+          <Row gutter={16}>
+            <Col xs={24} lg={12}>
+              <ReasonCard data={data} />
+              <CapitalCard cf={data.capital_flow} />
+            </Col>
+            <Col xs={24} lg={12}>
+              <LinkedStocks stocks={data.linked_stocks} />
+              <Card
+                title={<span><RobotOutlined style={{ color: '#1677ff' }} /> AI 洞察</span>}
+                size="small"
+                loading={insightLoading}
+              >
+                {insight ? (
+                  <div style={{ fontSize: 13, lineHeight: 1.8 }}><Markdown>{insight}</Markdown></div>
+                ) : (
+                  <Empty description="AI 分析加载中..." />
+                )}
+              </Card>
+            </Col>
+          </Row>
+
+          <PatternMatchCard code={data.code} name={data.name} />
+
+          <Card size="small" title={<span><RobotOutlined style={{ color: '#1677ff' }} /> 向 AI 追问</span>} style={{ marginTop: 16 }}>
+            <Space wrap>
+              <Button type="primary" icon={<RobotOutlined />}
+                onClick={() => askAI(`深度分析【${data.name}(${data.code})】：${data.board_count >= 2 ? data.board_count + '连板' : '首板'}涨停，题材「${data.themes?.main_theme}」，换手${data.capital_flow?.turnover_ratio}%。分析：1)涨停核心驱动 2)明日溢价预期 3)同题材谁更强。`)}
+              >
+                深度分析
+              </Button>
+              <Button onClick={() => askAI(`${data.name}所在的「${data.themes?.main_theme}」题材，处于什么阶段？明日是否还有延续性？`)}>题材延续性</Button>
+              <Button onClick={() => askAI(`${data.name}的换手率${data.capital_flow?.turnover_ratio}%，流通市值${data.capital_flow?.non_restricted_capital ? (data.capital_flow.non_restricted_capital / 1e8).toFixed(0) + '亿' : '—'}，这种资金结构意味着什么？是否健康？`)}>资金解读</Button>
+            </Space>
+          </Card>
+
+          <div style={{ marginTop: 12, color: '#999', fontSize: 11, textAlign: 'center' }}>以上分析仅供参考，不构成投资建议。</div>
+        </>
+      )}
+    </div>
+  )
+}

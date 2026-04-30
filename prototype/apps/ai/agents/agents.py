@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+from apps.ai.agents.llm_client import llm
+from apps.ai.prompts.templates import (
+    MARKET_REPLAY,
+    STOCK_INSIGHT,
+    THEME_ANALYSIS,
+    STRATEGY_DSL,
+    BACKTEST_ANALYSIS,
+)
+from apps.ai.context_builders.market_context import (
+    build_market_context,
+    build_stock_context,
+    build_theme_context,
+)
+
+
+class MarketReplayAgent:
+    def generate_report(
+        self, summary: dict, limit_up: list[dict], broken: list[dict], sectors: list[dict]
+    ) -> str:
+        context = build_market_context(summary, limit_up, broken, sectors)
+        prompt = MARKET_REPLAY.format(context=context)
+        return llm.chat(prompt)
+
+
+class StockInsightAgent:
+    def generate_summary(self, stock: dict, themes: list[str]) -> str:
+        context = build_stock_context(stock, themes)
+        prompt = STOCK_INSIGHT.format(context=context)
+        return llm.chat(prompt)
+
+
+class HotThemeAgent:
+    def analyze_theme(self, theme_name: str, stocks: list[dict]) -> str:
+        context = build_theme_context(theme_name, stocks)
+        prompt = THEME_ANALYSIS.format(context=context)
+        return llm.chat(prompt)
+
+
+class StrategyBuilderAgent:
+    def natural_language_to_dsl(self, user_input: str) -> str:
+        prompt = STRATEGY_DSL.format(user_input=user_input)
+        return llm.chat(prompt)
+
+
+class BacktestAnalystAgent:
+    def analyze_result(self, backtest_result: dict) -> str:
+        import json
+        context = json.dumps(backtest_result, ensure_ascii=False, indent=2)
+        prompt = BACKTEST_ANALYSIS.format(context=context)
+        return llm.chat(prompt)

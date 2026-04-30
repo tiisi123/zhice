@@ -1,0 +1,482 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams, Link } from 'react-router-dom'
+import {
+  Card, Col, Row, Tag, Spin, Tabs, Space, Button, Empty, Badge, message, Alert,
+} from 'antd'
+import {
+  TagsOutlined, ThunderboltOutlined, NodeIndexOutlined,
+  FireOutlined, RobotOutlined, RiseOutlined,
+} from '@ant-design/icons'
+import * as echarts from 'echarts'
+import { fetchApi } from '../api/client'
+import { askAI } from '../api/copilot'
+import AIDisclaimer from '../components/AIDisclaimer'
+import { AskAIChip, SectionHeader } from '../components/smart'
+
+interface Sector {
+  PlateID?: string
+  PlateName?: string
+  plate_name?: string
+  concept_name?: string
+  ChangePercent?: number
+  change_percent?: number
+  LimitUpNum?: number
+  limit_up_num?: number
+  MainForce?: number
+  concept_net_amount?: number
+  Intensity?: number
+  concept_intensity?: number
+  plate_id?: string
+  first_plate_name?: string
+  stock_name?: string
+  change_rate?: number
+  net_flow?: number
+  intensity?: number
+  is_new?: boolean; is_hot?: boolean; stage?: string
+}
+
+interface CycleItem {
+  name: string; phase: string; icon: string; color: string
+  score: number; appearance_days: number; trend: string
+  today_limit_up: number; advice: string
+}
+
+interface NewsItem {
+  id: string; title: string; summary: string; publish_time: string
+  source: string; url: string; is_red: boolean
+  matched_themes: string[]; stocks: { code: string; name: string }[]
+}
+
+interface DetailStock {
+  SecurityCode?: string
+  SecurityName?: string
+  ChangePercent?: number
+  stock_code?: string
+  stock_name?: string
+  change_rate?: number
+  board_count?: number
+}
+
+interface ApiMeta {
+  source?: string
+  data_status?: string
+  mock?: boolean
+  message?: string
+}
+
+function safeText(v: unknown, fallback = '—'): string {
+  if (v === undefined || v === null || v === '') return fallback
+  return String(v)
+}
+function safeNum(v: unknown, fallback = 0): number {
+  const n = Number(v)
+  return Number.isFinite(n) ? n : fallback
+}
+function pick(s: Sector): string {
+  return s.first_plate_name || s.PlateName || s.plate_name || s.concept_name || s.stock_name || ''
+}
+function pickNum(s: Sector, key: keyof Sector): number {
+  if (key === 'intensity') return safeNum(s.intensity ?? s.Intensity ?? s.concept_intensity)
+  if (key === 'change_rate') return safeNum(s.change_rate ?? s.ChangePercent ?? s.change_percent)
+  if (key === 'limit_up_num') return safeNum(s.limit_up_num ?? s.LimitUpNum)
+  if (key === 'net_flow') return safeNum(s.net_flow ?? s.MainForce ?? s.concept_net_amount)
+  return safeNum(s[key])
+}
+
+function plateId(s: Sector): string {
+  return s.plate_id || s.PlateID || ''
+}
+
+function stockCode(s: DetailStock): string {
+  return s.stock_code || s.SecurityCode || ''
+}
+
+function stockName(s: DetailStock): string {
+  return s.stock_name || s.SecurityName || ''
+}
+
+function stockChange(s: DetailStock): number {
+  return safeNum(s.change_rate ?? s.ChangePercent)
+}
+
+// ========== 题材热力气泡图 ==========
+function ThemeHeatBubble({ sectors, cycles, onSelect }: {
+  sectors: Sector[]; cycles: Record<string, CycleItem>; onSelect: (name: string) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!ref.current || !sectors.length) return
+    const chart = echarts.init(ref.current)
+    const PHASE_COLOR: Record<string, string> = {
+      '发酵': '#22c55e', '启动': '#3b82f6', '高潮': '#ef4444',
+      '退潮': '#f97316', '冷却': '#8b5cf6', '中性': '#999',
+    }
+    const data = sectors.slice(0, 30).map(s => {
+      const name = pick(s)
+      const change = pickNum(s, 'change_rate')
+      const intensity = pickNum(s, 'intensity')
+      const luNum = pickNum(s, 'limit_up_num')
+      const cycle = cycles[name]
+      const phase = cycle?.phase || s.stage || '中性'
+      return {
+        name,
+        value: [change, intensity, Math.max(luNum * 8, 12)],
+        itemStyle: { color: PHASE_COLOR[phase] || '#999', opacity: 0.75 },
+        label: { show: luNum >= 2, formatter: name, fontSize: 11 },
+      }
+    })
+
+    chart.setOption({
+      tooltip: {
+        formatter: (p: any) => {
+          const d = p.data
+          const cycle = cycles[d.name]
+          return `<b>${d.name}</b><br/>涨幅 ${d.value[0].toFixed(2)}% · 强度 ${d.value[1].toFixed(0)}<br/>${cycle ? `${cycle.icon} ${cycle.phase} · 活跃${cycle.appearance_days}日` : ''}`
+        },
+      },
+      grid: { left: 50, right: 20, top: 20, bottom: 40 },
+      xAxis: { name: '涨幅%', nameLocation: 'middle', nameGap: 25, splitLine: { lineStyle: { type: 'dashed' } } },
+      yAxis: { name: '强度', nameLocation: 'middle', nameGap: 35, splitLine: { lineStyle: { type: 'dashed' } } },
+      series: [{
+        type: 'scatter', symbolSize: (d: number[]) => d[2],
+        data,
+        emphasis: { itemStyle: { borderWidth: 2, borderColor: '#333' } },
+      }],
+    })
+    chart.on('click', (p: any) => { if (p.data?.name) onSelect(p.data.name) })
+    const onResize = () => chart.resize()
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); chart.dispose() }
+  }, [sectors, cycles, onSelect])
+
+  return <div ref={ref} style={{ width: '100%', height: 320 }} />
+}
+
+// ========== 题材排行列表 ==========
+function ThemeRankList({ sectors, cycles, selected, onSelect }: {
+  sectors: Sector[]; cycles: Record<string, CycleItem>; selected: string; onSelect: (name: string) => void
+}) {
+  const PHASE_COLOR: Record<string, string> = {
+    '发酵': 'green', '启动': 'blue', '高潮': 'red',
+    '退潮': 'orange', '冷却': 'purple', '中性': 'default',
+  }
+  return (
+    <div style={{ maxHeight: 520, overflow: 'auto' }}>
+      {sectors.slice(0, 20).map((s, i) => {
+        const name = pick(s)
+        const change = pickNum(s, 'change_rate')
+        const luNum = pickNum(s, 'limit_up_num')
+        const netFlow = pickNum(s, 'net_flow')
+        const cycle = cycles[name]
+        const isSelected = name === selected
+        return (
+          <div
+            key={name || i}
+            onClick={() => onSelect(name)}
+            style={{
+              padding: '8px 12px', cursor: 'pointer', borderRadius: 6,
+              borderBottom: '1px solid #f5f5f5',
+              background: isSelected ? '#e6f4ff' : 'transparent',
+              transition: 'background 0.15s',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Badge count={i + 1} style={{
+                backgroundColor: i < 3 ? '#f5222d' : i < 6 ? '#fa8c16' : '#d9d9d9',
+                fontSize: 11,
+              }} />
+              <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>{name}</span>
+              <span style={{ color: change >= 0 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>
+                {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+              {cycle && (
+                <Tag color={PHASE_COLOR[cycle.phase] || 'default'} style={{ fontSize: 11 }}>
+                  {cycle.icon} {cycle.phase}
+                </Tag>
+              )}
+              {luNum > 0 && <Tag style={{ fontSize: 11 }}>涨停 {luNum}</Tag>}
+              {s.is_new && <Tag color="cyan" style={{ fontSize: 11 }}>新题材</Tag>}
+              <span style={{ fontSize: 11, color: netFlow >= 0 ? '#f5222d' : '#52c41a' }}>
+                主力 {netFlow >= 0 ? '+' : ''}{(netFlow / 1e8).toFixed(1)}亿
+              </span>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ========== 题材详情面板 ==========
+function ThemeDetailPanel({ name, cycles }: { name: string; cycles: Record<string, CycleItem> }) {
+  const [stocks, setStocks] = useState<DetailStock[]>([])
+  const [loading, setLoading] = useState(false)
+  const [cycle, setCycle] = useState<any>(null)
+  const cycle0 = cycles[name]
+
+  useEffect(() => {
+    if (!name) return
+    setLoading(true)
+    setStocks([])
+    fetchApi<any>(`/theme/cycle/${encodeURIComponent(name)}?days=10`)
+      .then(r => setCycle(r))
+      .catch(() => setCycle(null))
+    fetchApi<{ data: DetailStock[] }>(`/theme/sectors`)
+      .then(res => {
+        const sec = (res.data || []).find((s: any) =>
+          pick(s as Sector) === name
+        )
+        if (sec) {
+          const pid = plateId(sec as Sector)
+          if (pid) {
+            fetchApi<{ data: DetailStock[] }>(`/theme/sectors/${pid}`)
+              .then(r => setStocks(r.data || []))
+              .catch(() => setStocks([]))
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [name])
+
+  if (!name) return <Card size="small"><Empty description="点击左侧题材查看详情" /></Card>
+
+  const sorted = [...stocks].sort((a, b) => (b.board_count || 0) - (a.board_count || 0))
+  const ROLE_STYLE: Record<string, { color: string; label: string }> = {
+    dragon: { color: '#f5222d', label: '龙头' },
+    zhongjun: { color: '#fa8c16', label: '中军' },
+    follower: { color: '#1677ff', label: '跟风' },
+  }
+
+  const dragon = sorted[0]
+  const zhongjun = sorted.find(s => (s.board_count || 0) >= 2 && s !== dragon)
+  const followers = sorted.filter(s => s !== dragon && s !== zhongjun).slice(0, 8)
+
+  return (
+    <Card size="small" title={<span><FireOutlined style={{ color: '#f5222d' }} /> {name}</span>}
+      loading={loading}
+      extra={cycle0 && <Tag color={cycle0.color}>{cycle0.icon} {cycle0.phase}</Tag>}
+    >
+      {cycle && (
+        <div style={{ marginBottom: 12, padding: 8, background: '#fafafa', borderRadius: 6, fontSize: 12, lineHeight: 1.8 }}>
+          <div>活跃 <b>{cycle.appearance_days}</b> 天 · 趋势 <b>{cycle.trend}</b> · 热度 <b>{cycle.score}</b></div>
+          <div style={{ color: '#666' }}>{cycle.advice}</div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>龙头梯队</div>
+      {dragon && (
+        <div style={{ marginBottom: 6 }}>
+          <Tag color={ROLE_STYLE.dragon.color}>{ROLE_STYLE.dragon.label}</Tag>
+          <Link to={`/stock/${stockCode(dragon)}`}>
+            {safeText(stockName(dragon))}
+          </Link>
+          <span style={{ marginLeft: 8, color: '#f5222d' }}>
+            +{stockChange(dragon).toFixed(2)}%
+          </span>
+          {dragon.board_count && dragon.board_count > 0 && <Tag color="red" style={{ marginLeft: 4 }}>{dragon.board_count}板</Tag>}
+        </div>
+      )}
+      {zhongjun && (
+        <div style={{ marginBottom: 6 }}>
+          <Tag color={ROLE_STYLE.zhongjun.color}>{ROLE_STYLE.zhongjun.label}</Tag>
+          <Link to={`/stock/${stockCode(zhongjun)}`}>
+            {safeText(stockName(zhongjun))}
+          </Link>
+        </div>
+      )}
+      {followers.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+          {followers.map((s, i) => (
+            <Link key={i} to={`/stock/${stockCode(s)}`}>
+              <Tag>{safeText(stockName(s))}</Tag>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <AskAIChip
+        prompt={`深度分析题材【${name}】：当前阶段${cycle0?.phase || ''}，核心驱动逻辑、产业链上下游、龙头${dragon ? safeText(stockName(dragon), '') : ''}的后续空间判断，以及明天该题材还能否延续。`}
+        label="AI 深度解读"
+      />
+    </Card>
+  )
+}
+
+// ========== 事件快讯精简版 ==========
+function EventTimeline({ onSelectTheme }: { onSelectTheme?: (name: string) => void }) {
+  const [items, setItems] = useState<NewsItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchApi<{ items: NewsItem[] }>('/news/timeline?n=30&important_only=true')
+      .then(r => setItems(r.items || []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <Spin size="small" />
+
+  return (
+    <div style={{ maxHeight: 400, overflow: 'auto' }}>
+      {items.length === 0 && <Empty description="暂无重要快讯" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+      {items.slice(0, 15).map(n => (
+        <div key={n.id} style={{ padding: '6px 0', borderBottom: '1px dashed #f0f0f0', fontSize: 12 }}>
+          <span style={{ color: '#999', marginRight: 8 }}>{(n.publish_time || '').slice(11, 16)}</span>
+          {n.is_red && <Tag color="red" style={{ fontSize: 10 }}>重要</Tag>}
+          <span style={{ fontWeight: n.is_red ? 600 : 400 }}>{n.title}</span>
+          {n.matched_themes?.slice(0, 2).map(t => (
+            <Tag key={t} color="orange" style={{ fontSize: 10, marginLeft: 4, cursor: onSelectTheme ? 'pointer' : 'default' }}
+              onClick={() => onSelectTheme?.(t)}>{t}</Tag>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ========== 主组件 ==========
+export default function ThemeWorkshopPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tab = searchParams.get('tab') || 'workshop'
+  const [sectors, setSectors] = useState<Sector[]>([])
+  const [cycles, setCycles] = useState<Record<string, CycleItem>>({})
+  const [selected, setSelected] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
+  const [meta, setMeta] = useState<ApiMeta>({})
+
+  useEffect(() => {
+    setLoading(true)
+    setErr('')
+    setMeta({})
+    Promise.all([
+      fetchApi<{ data: Sector[]; source?: string; data_status?: string; mock?: boolean; message?: string }>('/theme/sectors'),
+      fetchApi<{ items: CycleItem[] }>('/theme/cycle-batch?top=20'),
+    ]).then(([sec, cyc]) => {
+      const data = (sec.data || []).sort((a, b) =>
+        pickNum(b, 'intensity') - pickNum(a, 'intensity')
+      )
+      setSectors(data)
+      setMeta({ source: sec.source, data_status: sec.data_status, mock: sec.mock, message: sec.message })
+      const m: Record<string, CycleItem> = {}
+      for (const c of cyc.items || []) m[c.name] = c
+      setCycles(m)
+      if (data.length > 0 && !selected) {
+        setSelected(pick(data[0]))
+      }
+    }).catch(() => {
+      const msg = '题材接口不可用，当前不展示题材数据。'
+      setErr(msg)
+      message.error(msg)
+    })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleSelect = useCallback((name: string) => setSelected(name), [])
+
+  if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+        <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <TagsOutlined style={{ color: '#1677ff' }} /> 题材工坊
+          <span style={{ fontSize: 13, color: '#999', fontWeight: 400 }}>· 主线挖掘与推演</span>
+        </h2>
+        <Space>
+          <Tag color="blue">{sectors.length} 个活跃题材</Tag>
+          <Button size="small" icon={<RobotOutlined />}
+            onClick={() => askAI(`今日活跃题材 Top5：${sectors.slice(0, 5).map(pick).filter(Boolean).join('、') || '暂无'}。分析哪个是真正主线、哪个是跟风，明天最可能延续的是哪条线。`)}
+          >AI 判断主线</Button>
+        </Space>
+      </div>
+      {err && <Alert type="error" showIcon message={err} style={{ marginBottom: 12 }} />}
+      {!err && sectors.length === 0 && <Alert type="info" showIcon message="暂无题材数据" description="接口返回真实空状态，未展示示例题材。" style={{ marginBottom: 12 }} />}
+      {!err && (
+        <Alert
+          type={meta.mock ? 'warning' : meta.data_status === 'empty' ? 'info' : 'success'}
+          showIcon
+          message={`数据源：${meta.source || '未知源'} / 状态：${meta.data_status || '未知状态'}${meta.mock ? ' / mock' : ''}`}
+          description={meta.message}
+          style={{ marginBottom: 12 }}
+        />
+      )}
+
+      <Tabs
+        activeKey={tab}
+        onChange={(k) => setSearchParams({ tab: k }, { replace: true })}
+        type="card"
+        items={[
+          {
+            key: 'workshop',
+            label: <span><TagsOutlined /> 主线排行</span>,
+            children: (
+              <>
+                <Card size="small" title={<SectionHeader icon={<RiseOutlined />} title="题材热力图" subtitle="气泡大小=涨停数 颜色=周期阶段" />} style={{ marginBottom: 16 }} bodyStyle={{ padding: 8 }}>
+                  <ThemeHeatBubble sectors={sectors} cycles={cycles} onSelect={handleSelect} />
+                </Card>
+
+                <Row gutter={16}>
+                  <Col xs={24} lg={8}>
+                    <Card size="small" title="题材排行" bodyStyle={{ padding: 0 }}>
+                      <ThemeRankList sectors={sectors} cycles={cycles} selected={selected} onSelect={handleSelect} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} lg={9}>
+                    <ThemeDetailPanel name={selected} cycles={cycles} />
+                  </Col>
+                  <Col xs={24} lg={7}>
+                    <Card size="small" title={<span><ThunderboltOutlined /> 事件快讯</span>}>
+                      <EventTimeline onSelectTheme={handleSelect} />
+                    </Card>
+                  </Col>
+                </Row>
+              </>
+            ),
+          },
+          {
+            key: 'events',
+            label: <span><ThunderboltOutlined /> 事件时间线</span>,
+            children: <HotEventsInline />,
+          },
+          {
+            key: 'lifecycle',
+            label: <span><FireOutlined /> 题材生命周期</span>,
+            children: <ProsperityInline />,
+          },
+          {
+            key: 'chain',
+            label: <span><NodeIndexOutlined /> 产业链传导</span>,
+            children: <ChainInline />,
+          },
+          {
+            key: 'rotation',
+            label: <span><NodeIndexOutlined /> 轮动推演</span>,
+            children: <RotationInline />,
+          },
+          {
+            key: 'history',
+            label: <span><RiseOutlined /> 历史复盘</span>,
+            children: <ProsperityInline />,
+          },
+        ]}
+      />
+      <AIDisclaimer variant="inline" />
+    </div>
+  )
+}
+
+import { lazy, Suspense } from 'react'
+const HotEventsPageLazy = lazy(() => import('./HotEventsPage'))
+const RotationPageLazy = lazy(() => import('./RotationPage'))
+const ProsperityPageLazy = lazy(() => import('./ProsperityPage'))
+const ChainPageLazy = lazy(() => import('./ChainPage'))
+const fallback = <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>
+function HotEventsInline() { return <Suspense fallback={fallback}><HotEventsPageLazy /></Suspense> }
+function RotationInline() { return <Suspense fallback={fallback}><RotationPageLazy /></Suspense> }
+function ProsperityInline() { return <Suspense fallback={fallback}><ProsperityPageLazy /></Suspense> }
+function ChainInline() { return <Suspense fallback={fallback}><ChainPageLazy /></Suspense> }

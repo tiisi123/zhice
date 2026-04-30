@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import json
+import logging
+from typing import Optional
+
+import httpx
+
+from apps.api.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class LLMClient:
+    def __init__(self):
+        self._client = httpx.Client(timeout=60)
+
+    def chat(self, prompt: str, model: str = "gpt-4o") -> str:
+        if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
+            try:
+                return self._call_openai(prompt, model)
+            except Exception as e:
+                logger.warning("OpenAI call failed, falling back to mock: %s", e)
+        if settings.anthropic_api_key and settings.anthropic_api_key.startswith("sk-"):
+            try:
+                return self._call_anthropic(prompt)
+            except Exception as e:
+                logger.warning("Anthropic call failed, falling back to mock: %s", e)
+        return self._mock_response(prompt)
+
+    def _call_openai(self, prompt: str, model: str) -> str:
+        resp = self._client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 2000,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+    def _call_anthropic(self, prompt: str) -> str:
+        base = settings.anthropic_base_url.rstrip("/")
+        resp = self._client.post(
+            f"{base}/v1/messages",
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 2000,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["content"][0]["text"]
+
+    def _mock_response(self, prompt: str) -> str:
+        p = prompt.lower()
+        if "回测" in prompt or "绩效" in prompt or "total_return" in p:
+            return ("### 绩效评价\n该策略整体表现中等偏上，年化收益为正，最大回撤可控，"
+                    "夏普比率接近1.0，说明风险调整后收益合理。\n\n"
+                    "### 优势与劣势\n**优势：**\n- 盈亏比大于1.5，盈利交易平均收益高于亏损\n"
+                    "- 持有天数短，资金周转效率高\n\n**劣势：**\n- 胜率偏低，连续亏损影响心态\n"
+                    "- 依赖短期波动，震荡市信号少\n\n"
+                    "### 改进建议\n1. 加入情绪过滤，冰点/低迷时降低仓位\n"
+                    "2. 调整止盈区间，验证更宽止盈能否提升盈亏比\n\n"
+                    "### 适用环境\n适合情绪回暖至高潮阶段。不适合缩量震荡、情绪冰点期。\n\n"
+                    "以上分析仅供参考，不构成投资建议。")
+        if any(kw in prompt for kw in ("复盘报告", "市场总览", "今日市场", "涨停家数")):
+            return ("### 1. 市场总览\n今日市场情绪偏暖，涨停家数较昨日增加，炸板率维持合理区间。\n\n"
+                    "### 2. 主线题材\n- AI硬件：涨停5家，算力需求持续扩张\n"
+                    "- 商业航天：涨停3家，政策催化持续\n\n"
+                    "### 3. 龙头梯队\n最高板5连板，龙头地位稳固，跟风梯队活跃度一般。\n\n"
+                    "### 4. 资金与情绪\n主力净流入偏正面，情绪处于回暖阶段。\n\n"
+                    "### 5. 风险提示\n- 高位股面临分歧风险\n- 部分题材炒作至高潮，警惕退潮\n\n"
+                    "### 6. 次日计划\n关注主线低吸机会，高位股谨慎追涨。\n\n"
+                    "以上分析仅供参考，不构成投资建议。")
+        if any(kw in prompt for kw in ("题材阶段", "板块分析", "题材分析", "哪个题材")):
+            return ("### 题材阶段\n当前处于**启动期**，涨停家数持续增加，板块内资金聚集效应明显。\n\n"
+                    "### 核心个股\n- 龙头股封板稳固，换手充分，辨识度高\n"
+                    "- 跟风梯队中有2-3只独立逻辑品种值得关注\n\n"
+                    "### 演化预判\n未来1-3天大概率进入加速期，关注龙头能否打出更高空间板。\n\n"
+                    "以上分析仅供参考，不构成投资建议。")
+        if any(kw in prompt for kw in ("个股数据", "涨停原因", "stock_code")):
+            return ("### 发生了什么\n该股今日涨停，所属板块整体走强，封单稳固。\n\n"
+                    "### 为什么重要\n板块内涨停家数增加，题材处于启动阶段，市场关注度提升。\n\n"
+                    "### 怎么看\n关注明日溢价率及板块持续性，留意大盘情绪变化对个股的影响。\n\n"
+                    "以上分析仅供参考，不构成投资建议。")
+        from datetime import datetime as _dt
+        return (f"你好！我是智策AI助手。当前时间: {_dt.now().strftime('%Y年%m月%d日 %H:%M')}。\n\n"
+                "我可以帮你做以下分析：\n"
+                "- **市场复盘**：生成每日复盘报告\n"
+                "- **题材分析**：判断题材阶段和核心个股\n"
+                "- **个股洞察**：分析个股涨停原因和关联\n"
+                "- **策略回测**：将自然语言策略转换为DSL并回测\n\n"
+                "当前处于模拟回复模式。配置 AI API Key 后可启用真实分析。\n\n"
+                "以上分析仅供参考，不构成投资建议。")
+
+    def close(self):
+        self._client.close()
+
+
+llm = LLMClient()

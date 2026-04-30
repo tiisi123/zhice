@@ -1,0 +1,43 @@
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑',
+    'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 滚动条统一 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #bfbfbf; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 涨跌色变量（A股口径：红涨绿跌） */
+:root {
+  --color-up: #f5222d;
+  --color-down: #52c41a;
+  --color-flat: #8c8c8c;
+}
+
+/* 通用工具类 */
+.c-up { color: var(--color-up); }
+.c-down { color: var(--color-down); }
+.c-flat { color: var(--color-flat); }
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  :root { font-size: 13px; }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}

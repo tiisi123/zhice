@@ -1,0 +1,46 @@
+[
+  {
+    "date": "2026-04-24",
+    "limit_up": 68,
+    "broken": 27,
+    "broken_rate": 28.42,
+    "max_board": 6,
+    "sentiment": "中性",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-04-25",
+    "limit_up": 0,
+    "broken": 0,
+    "broken_rate": 0.0,
+    "max_board": 0,
+    "sentiment": "冰点",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-04-26",
+    "limit_up": 68,
+    "broken": 27,
+    "broken_rate": 28.42,
+    "max_board": 6,
+    "sentiment": "中性",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-04-27",
+    "limit_up": 68,
+    "broken": 27,
+    "broken_rate": 28.42,
+    "max_board": 6,
+    "sentiment": "中性",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  }
+]
