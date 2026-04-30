@@ -1,0 +1,145 @@
+# T04 (M001/S01) — zhice 单机部署栈（4 服务）
+#
+# 服务编排：
+#   zhice-db (mysql:8.0)   — 数据库，utf8mb4_0900_ai_ci + UTC 时区
+#   zhice-api (FastAPI)    — 后端，启动前自动 alembic upgrade head
+#   zhice-web (Nginx)      — 前端 SPA + /api 反代
+#   caddy (Caddy 2)        — TLS 终结 + Let's Encrypt
+#
+# 启动顺序（depends_on + healthcheck）：
+#   zhice-db 先 healthy → zhice-api 才启动 → zhice-web → caddy
+#
+# 网络：zhice-net 桥接，容器间用服务名 DNS 解析（zhice-api / zhice-db）
+# 卷：mysql-data 持久化数据库；caddy_data + caddy_config 持久化 ACME 证书；
+#     /var/log/zhice 卷挂载到宿主机方便业主 ssh tail
+#
+# 业主操作：cd deploy && cp .env.example .env && 编辑 .env && docker compose up -d --build
+#
+# 本机开发：把 .env 里 STAGING_DOMAIN 设为 ":80"（让 Caddy 走纯 HTTP），跳过 Let's Encrypt
+
+name: zhice
+
+services:
+  # ───────────────────────────────────────────────────────────────────────
+  # zhice-db: MySQL 8.0
+  # ───────────────────────────────────────────────────────────────────────
+  zhice-db:
+    image: mysql:8.0
+    container_name: zhice-db
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: zhice
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - zhice-net
+    healthcheck:
+      # 用 root + MYSQL_ROOT_PASSWORD 做存活检查
+      # 注意：mysqladmin ping 在 8.0 镜像里是默认提供的
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+
+  # ───────────────────────────────────────────────────────────────────────
+  # zhice-api: FastAPI + gunicorn/uvicorn
+  # ───────────────────────────────────────────────────────────────────────
+  zhice-api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+    container_name: zhice-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    # docker compose env_file 把 .env 全量注入；config.py 的 model_validator
+    # 启动时检查 ZHICE_JWT_SECRET / ZHICE_ADMIN_PASSWORD / DATABASE_URL，缺则
+    # RuntimeError 退出 → docker restart 拉起循环（unless-stopped），日志写
+    # /var/log/zhice/api.log
+    depends_on:
+      zhice-db:
+        condition: service_healthy
+    networks:
+      - zhice-net
+    volumes:
+      - /var/log/zhice:/var/log/zhice
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost:8000/api/health -o /dev/null || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      # 给 alembic upgrade + gunicorn 启动留 60s 余量
+      start_period: 60s
+
+  # ───────────────────────────────────────────────────────────────────────
+  # zhice-web: Nginx + SPA + /api 反代
+  # ───────────────────────────────────────────────────────────────────────
+  zhice-web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    container_name: zhice-web
+    restart: unless-stopped
+    depends_on:
+      zhice-api:
+        condition: service_started
+    networks:
+      - zhice-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -fsS http://localhost/ -o /dev/null || exit 1",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # ───────────────────────────────────────────────────────────────────────
+  # caddy: TLS 终结 + Let's Encrypt 自动签发
+  # ───────────────────────────────────────────────────────────────────────
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: zhice-caddy
+    restart: unless-stopped
+    environment:
+      # Caddyfile 用 {$STAGING_DOMAIN} 占位；
+      # 业主在 .env 里设置（如 staging.zhice.com 或 ":80" 本地纯 HTTP 模式）
+      STAGING_DOMAIN: ${STAGING_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - /var/log/zhice:/var/log/zhice
+    depends_on:
+      zhice-web:
+        condition: service_started
+    networks:
+      - zhice-net
+
+networks:
+  zhice-net:
+    driver: bridge
+
+volumes:
+  mysql-data:
+  caddy-data:
+  caddy-config:

@@ -1,0 +1,65 @@
+# T04 (M001/S01) — docker build 上下文排除
+#
+# build context = repo 根，本文件让 `docker compose build` 不把无关文件
+# 打进 image 层（速度 + 安全：避免 .env / .git / .gsd 进入构建上下文）
+#
+# 注意：.dockerignore 路径以 build context 为根，不是以 deploy/ 为根
+
+# ─── VCS / IDE ──────────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+.idea
+.vscode
+.code-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── GSD 工作流（本地状态，不应进入镜像） ──────────────────────────────
+.gsd
+.gsd-id
+.gsd.lock
+.bg-shell
+.mcp.json
+
+# ─── Secrets ────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+deploy/.env
+
+# ─── Python ─────────────────────────────────────────────────────────────
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.egg-info
+.venv
+venv
+env
+
+# ─── Node ───────────────────────────────────────────────────────────────
+**/node_modules
+**/.next
+**/dist
+**/build
+**/coverage
+**/.cache
+
+# ─── 日志 / 数据 / 临时文件 ─────────────────────────────────────────────
+*.log
+prototype/data
+prototype/api-test.log
+prototype/apps/web/web-test.log
+
+# ─── 文档 / 杂项（不进运行时镜像） ─────────────────────────────────────
+docs
+*.md
+!prototype/README.md
+.audits
+.planning
