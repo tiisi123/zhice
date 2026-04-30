@@ -15,10 +15,11 @@ Each probe 流程：
   4. 失败路径走 ``_persist_alert`` —— 一个 ``kind`` 同时只允许一行未 resolved
      的 ``system_alerts``，已存在则 UPDATE meta + 累加 ``retry_count`` 而不是
      INSERT 新行（防止每 30 分钟一行的写抖）；
-  5. 仅在 INSERT（新告警）时调用 ``_send_alert_email`` 通过 T06 ``notify.smtp``
-     发邮件；T06 模块未到位时退化为 ``logger.warning`` 占位；
+  5. 仅在 INSERT（新告警）时调用 ``_send_alert_email`` 通过 ``notify.smtp``
+     发 Chinese cookie-failure 邮件给业主；
   6. 探测成功则调用 ``_resolve_alert`` 把同 kind 未 resolved 的行 ``UPDATE
-     resolved_at=NOW()``，admin 面板自动转绿。
+     resolved_at=NOW()``，admin 面板自动转绿；上一次内存状态为 fail 时再发
+     一封 ``cookie_recovery_email_body`` 让业主关闭红色警觉。
 
 观测面：
   - 内存：``GET /api/health/kpl`` 返回 ``_HEALTH_CACHE`` 的拷贝；
@@ -120,29 +121,52 @@ def _resolve_alert(kind: str) -> None:
         logger.exception("auto-resolve failed kind=%s", kind)
 
 
+def _extract_http_code(last_error: str | None) -> int | None:
+    """Pull the HTTP code out of an ``upstream_error`` last_error string.
+
+    ``_evaluate`` formats upstream errors as ``"kpl_upstream_error http_code=NNN"``
+    so the email template can show the operator the exact status code. For
+    every other failure mode (cookie_missing, malformed, network exception)
+    there is no HTTP code, so we return ``None``.
+    """
+    if not last_error or "http_code=" not in last_error:
+        return None
+    try:
+        return int(last_error.split("http_code=", 1)[1].strip())
+    except (ValueError, IndexError):
+        return None
+
+
 def _send_alert_email(
     kind: str, endpoint: str, last_ok_at: str | None, last_error: str | None
 ) -> None:
-    """Send the cookie-failure email through T06 ``notify.smtp``.
+    """Send the Chinese cookie-failure email through ``notify.smtp``."""
+    from apps.api.notify.smtp import send_alert
+    from apps.api.notify.templates import cookie_failure_email_body
 
-    T06 has not landed yet; the import is wrapped in ``try/except ImportError``
-    so this module stays standalone-runnable. Once T06 lands the email path
-    activates without further code change.
-    """
     try:
-        from apps.api.notify.smtp import send_alert  # type: ignore
-        from apps.api.notify.templates import cookie_failure_email_body  # type: ignore
-    except ImportError:
-        logger.warning(
-            "SMTP module not yet available, alert email skipped (T06 pending) kind=%s",
-            kind,
+        http_code = _extract_http_code(last_error)
+        body = cookie_failure_email_body(
+            endpoint, http_code, last_ok_at, last_error or "unknown"
         )
-        return
-    try:
-        body = cookie_failure_email_body(endpoint, None, last_ok_at, last_error)
-        send_alert(f"【智策】KPL {endpoint} 健康探测失败", body)
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        send_alert(f"【智策】KPL {endpoint} 健康探测失败 - {ts}", body)
     except Exception:
         logger.exception("SMTP send_alert failed kind=%s", kind)
+
+
+def _send_recovery_email(kind: str, endpoint: str) -> None:
+    """Send the Chinese cookie-recovery email when a failing probe turns green."""
+    from apps.api.notify.smtp import send_alert
+    from apps.api.notify.templates import cookie_recovery_email_body
+
+    try:
+        send_alert(
+            f"【智策】KPL {endpoint} 已恢复",
+            cookie_recovery_email_body(endpoint),
+        )
+    except Exception:
+        logger.exception("SMTP send recovery failed kind=%s", kind)
 
 
 def _evaluate(resp: Any, prev: dict[str, Any], list_key: str) -> dict[str, Any]:
@@ -206,6 +230,8 @@ def probe_realtime() -> dict[str, Any]:
         state = _evaluate(resp, prev, list_key="list")
         if state["status"] == "ok":
             _resolve_alert(kind)
+            if prev.get("status") == "fail":
+                _send_recovery_email(kind, "realtime")
 
     with _CACHE_LOCK:
         _HEALTH_CACHE["realtime"] = state
@@ -249,6 +275,8 @@ def probe_history() -> dict[str, Any]:
         state = _evaluate(resp, prev, list_key="list")
         if state["status"] == "ok":
             _resolve_alert(kind)
+            if prev.get("status") == "fail":
+                _send_recovery_email(kind, "history")
 
     with _CACHE_LOCK:
         _HEALTH_CACHE["history"] = state
