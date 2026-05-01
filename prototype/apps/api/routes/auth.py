@@ -56,6 +56,7 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=6, max_length=64)
     nickname: str = Field(default="", max_length=32)
     invite_code: str = Field(..., min_length=6, max_length=6, pattern=r"^[A-Z0-9]{6}$")
+    terms_accepted: bool = False
 
     @field_validator("phone")
     @classmethod
@@ -99,6 +100,12 @@ def register(inp: RegisterIn, request: Request):
 
     execute("UPDATE invite_codes SET used_count = used_count + 1 WHERE code = ?", (inp.invite_code,))
     execute("INSERT INTO invite_usage(code, user_id) VALUES (?, ?)", (inp.invite_code, user["id"]))
+
+    if inp.terms_accepted:
+        execute(
+            "UPDATE users SET terms_accepted_at = ? WHERE id = ?",
+            (datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), user["id"]),
+        )
 
     token = create_token({"sub": str(user["id"]), "phone": user["phone"]})
     return {"user": user, "token": token}

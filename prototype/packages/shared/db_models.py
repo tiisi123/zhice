@@ -82,6 +82,12 @@ class User(Base):
     created_at: Mapped["DateTime"] = mapped_column(
         DateTime(timezone=False), server_default=func.current_timestamp(), nullable=False
     )
+    terms_accepted_at: Mapped["DateTime | None"] = mapped_column(
+        DateTime(timezone=False), nullable=True, default=None
+    )
+    payment_terms_accepted_at: Mapped["DateTime | None"] = mapped_column(
+        DateTime(timezone=False), nullable=True, default=None
+    )
 
 
 class UserQuota(Base):

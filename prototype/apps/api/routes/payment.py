@@ -79,6 +79,7 @@ def query_order(order_no: str, user: dict = Depends(current_user)):
 
 class RedeemInput(BaseModel):
     code: str
+    payment_terms_accepted: bool = False
 
 
 @router.post("/redeem")
@@ -119,6 +120,13 @@ def redeem_invite_code(inp: RedeemInput, user: dict = Depends(current_user)):
     )
 
     updated = set_vip(user["id"], row["plan"], row["days"])
+
+    if inp.payment_terms_accepted:
+        execute(
+            "UPDATE users SET payment_terms_accepted_at = ? WHERE id = ?",
+            (datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), user["id"]),
+        )
+
     logger.info("invite_code redeemed: code=%s user=%s plan=%s days=%d",
                 code, user["id"], row["plan"], row["days"])
     return {
