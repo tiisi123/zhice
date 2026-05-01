@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
 
-from apps.api.auth import current_user
+from apps.api.auth import current_user, require_vip
 from apps.api.db import execute, query_all, query_one
 from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
@@ -50,7 +50,7 @@ def broken_cases(date: Optional[str] = Query(None)):
 
 
 @router.get("/strategy-recommend")
-def strategy_recommend(sentiment: str = Query("中性"), max_board: int = Query(3)):
+def strategy_recommend(sentiment: str = Query("中性"), max_board: int = Query(3), user: dict = Depends(require_vip("standard"))):
     try:
         recs = recommend_strategy(sentiment, max_board)
         return {"sentiment": sentiment, "max_board": max_board, "recommendations": recs}

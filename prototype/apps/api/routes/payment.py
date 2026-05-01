@@ -17,6 +17,10 @@ from apps.api.auth import current_user, require_admin, set_vip
 from apps.api.db import execute, query_one, query_all
 
 logger = logging.getLogger(__name__)
+
+INVITE_CHARS = "ACDEFGHJKMNPQRSTUVWXYZ2345679"
+_INVITE_LEN = 6
+_INVITE_MAX_RETRIES = 5
 router = APIRouter()
 
 PLANS = {
@@ -148,13 +152,20 @@ def generate_invite_codes(inp: GenerateCodesInput, user: dict = Depends(current_
 
     codes = []
     for _ in range(inp.count):
-        code = f"ZC-{secrets.token_hex(4).upper()}"
-        execute(
-            "INSERT INTO invite_codes(code, plan, days, max_uses, created_by) VALUES (?,?,?,?,?)",
-            (code, inp.plan, inp.days, inp.max_uses, user["id"]),
-        )
-        codes.append(code)
-    logger.info("admin generated %d invite codes: plan=%s days=%d", inp.count, inp.plan, inp.days)
+        for attempt in range(_INVITE_MAX_RETRIES):
+            code = "".join(secrets.choice(INVITE_CHARS) for _ in range(_INVITE_LEN))
+            try:
+                execute(
+                    "INSERT INTO invite_codes(code, plan, days, max_uses, created_by) VALUES (?,?,?,?,?)",
+                    (code, inp.plan, inp.days, inp.max_uses, user["id"]),
+                )
+                codes.append(code)
+                break
+            except Exception:
+                if attempt == _INVITE_MAX_RETRIES - 1:
+                    raise ValueError(f"邀请码生成失败：{_INVITE_MAX_RETRIES} 次唯一性冲突")
+    logger.info("admin generated %d invite codes (len=%d): plan=%s days=%d",
+                inp.count, _INVITE_LEN, inp.plan, inp.days)
     return {"codes": codes, "plan": inp.plan, "days": inp.days}
 
 

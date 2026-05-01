@@ -19,7 +19,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from apps.api.auth import current_user
+from apps.api.auth import current_user, require_vip
 from apps.api.db import _DB_PATH
 from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
@@ -270,7 +270,7 @@ _TEMPLATE_RISK = {
 
 
 @router.get("/strategies")
-def recommend(user: dict = Depends(current_user)):
+def recommend(user: dict = Depends(require_vip("standard"))):
     style = _primary_style(user)
     style_combo = _style_combo(user["id"], style)
     if style_combo:
@@ -371,7 +371,7 @@ _explain_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="recomm
 
 
 @router.get("/explain/{template_id}")
-def explain(template_id: str, user: dict = Depends(current_user)):
+def explain(template_id: str, user: dict = Depends(require_vip("standard"))):
     """让 AI 为指定模板生成"为什么现在适合你"的短评（150-250 字）。"""
     cache_key = f"{user['id']}:{template_id}"
     now = time.time()

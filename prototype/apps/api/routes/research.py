@@ -1,7 +1,9 @@
 """研究/基本面扩展接口：公告 / AI 财报解读 / 另类数据 / 卖方预期时间线 / 历史景气周期。"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from apps.api.auth import require_vip
 
 from apps.api.utils.contract import wrap_contract
 from packages.features.research_ext import (
@@ -94,7 +96,7 @@ def sellside(code: str):
 
 
 @router.get("/prosperity-cycle")
-def prosperity_cycle(industry: str = Query(...)):
+def prosperity_cycle(industry: str = Query(...), user: dict = Depends(require_vip("standard"))):
     try:
         result = historical_prosperity(industry)
         sample_mode = True  # sample_historical_prosperity 为静态模拟序列

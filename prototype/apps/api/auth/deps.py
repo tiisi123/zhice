@@ -51,7 +51,7 @@ def require_vip(min_level: str = "standard"):
 
     def _dep(user: dict = Depends(current_user)):
         if order.get(user["vip_level"], 0) < order.get(min_level, 0):
-            raise HTTPException(status_code=403, detail=f"该功能需要 {min_level} 或更高会员")
+            raise HTTPException(status_code=403, detail="升级会员可解锁完整内容")
         return user
 
     return _dep

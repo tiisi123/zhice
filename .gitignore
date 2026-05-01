@@ -34,3 +34,4 @@ vendor/
 coverage/
 .cache/
 tmp/
+.omx/

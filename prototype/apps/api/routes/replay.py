@@ -6,7 +6,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Depends, Query, HTTPException
+
+from apps.api.auth import require_vip
 
 from apps.api.utils.contract import wrap_contract
 from packages.connectors.kpl.sentinel import (
@@ -116,7 +118,7 @@ def _prev_trade_date(hist_keys: list[str], today: str) -> Optional[str]:
 
 
 @router.get("/summary")
-def market_summary(date: Optional[str] = Query(None)):
+def market_summary(date: Optional[str] = Query(None), user: dict = Depends(require_vip("standard"))):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         kpl_stats = _kpl.get_market_statistics(trade_date)
@@ -446,7 +448,7 @@ def replay_archive(
 
 
 @router.get("/next-day-strategy")
-def next_day_strategy(date: Optional[str] = Query(None)):
+def next_day_strategy(date: Optional[str] = Query(None), user: dict = Depends(require_vip("standard"))):
     """
     PRD M4A-08：次日开盘策略 · 三场景结构化输出（溢价 / 低吸 / 排板）。
     聚合当日 summary + ladder + sectors，输出可直接渲染的策略卡片数据。

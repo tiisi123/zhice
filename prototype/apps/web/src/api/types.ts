@@ -171,3 +171,10 @@ export interface ApiMeta {
   message?: string
   name?: string
 }
+
+export interface RegisterPayload {
+  phone: string
+  password: string
+  nickname?: string
+  invite_code: string
+}

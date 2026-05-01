@@ -196,6 +196,9 @@ class ReportArchive(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    visibility: Mapped[str] = mapped_column(
+        String(32), default="owner", server_default="owner", nullable=False
+    )
     created_at: Mapped["DateTime"] = mapped_column(
         DateTime(timezone=False), server_default=func.current_timestamp(), nullable=False
     )

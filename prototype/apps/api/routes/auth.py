@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import time
 from collections import defaultdict, deque
+from datetime import datetime
 from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -16,6 +17,7 @@ from apps.api.auth import (
     update_style,
 )
 from apps.api.auth.deps import QUOTA_LIMITS
+from apps.api.db import execute, query_one
 
 router = APIRouter()
 
@@ -53,6 +55,7 @@ class RegisterIn(BaseModel):
     phone: str = Field(min_length=2, max_length=32)
     password: str = Field(min_length=6, max_length=64)
     nickname: str = Field(default="", max_length=32)
+    invite_code: str = Field(..., min_length=6, max_length=6, pattern=r"^[A-Z0-9]{6}$")
 
     @field_validator("phone")
     @classmethod
@@ -78,10 +81,25 @@ def register(inp: RegisterIn, request: Request):
     if not _check_rate(_REG_HITS, ip, _REG_WINDOW, _REG_MAX):
         raise HTTPException(status_code=429, detail="注册过于频繁，请稍后再试")
     _record(_REG_HITS, ip)
+
+    code_row = query_one("SELECT * FROM invite_codes WHERE code = ?", (inp.invite_code,))
+    if not code_row or code_row["used_count"] >= code_row["max_uses"]:
+        raise HTTPException(status_code=400, detail="邀请码无效或已使用")
+    if code_row.get("expires_at"):
+        try:
+            if datetime.strptime(code_row["expires_at"], "%Y-%m-%d %H:%M:%S") < datetime.now():
+                raise HTTPException(status_code=400, detail="邀请码无效或已使用")
+        except ValueError:
+            pass
+
     try:
         user = register_user(inp.phone, inp.password, inp.nickname)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    execute("UPDATE invite_codes SET used_count = used_count + 1 WHERE code = ?", (inp.invite_code,))
+    execute("INSERT INTO invite_usage(code, user_id) VALUES (?, ?)", (inp.invite_code, user["id"]))
+
     token = create_token({"sub": str(user["id"]), "phone": user["phone"]})
     return {"user": user, "token": token}
 

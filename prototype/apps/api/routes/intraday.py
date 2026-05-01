@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
+
+from apps.api.auth import require_vip
 
 from apps.api.utils.contract import wrap_contract
 from packages.connectors.kpl.sentinel import (
@@ -95,7 +97,7 @@ def broken_list(date: Optional[str] = Query(None)):
 
 
 @router.get("/hot-stocks")
-def hot_stocks(date: Optional[str] = Query(None)):
+def hot_stocks(date: Optional[str] = Query(None), user: dict = Depends(require_vip("standard"))):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_hot_stocks(trade_date) or []
@@ -121,7 +123,7 @@ def hot_stocks(date: Optional[str] = Query(None)):
 
 
 @router.get("/anomaly")
-def anomaly(date: Optional[str] = Query(None)):
+def anomaly(date: Optional[str] = Query(None), user: dict = Depends(require_vip("standard"))):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_market_anomaly(trade_date) or []

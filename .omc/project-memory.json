@@ -1,0 +1,88 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1777614073826,
+  "projectRoot": "/home/factory/zhice",
+  "techStack": {
+    "languages": [
+      {
+        "name": "C/C++",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Makefile"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": null,
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "make build",
+    "testCommand": "make test",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "deploy": {
+      "path": "deploy",
+      "purpose": null,
+      "fileCount": 10,
+      "lastAccessed": 1777614073821,
+      "keyFiles": [
+        "Caddyfile",
+        "api-entrypoint.sh",
+        "api.Dockerfile",
+        "docker-compose.verify.yml",
+        "docker-compose.yml"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 1,
+      "lastAccessed": 1777614073821,
+      "keyFiles": []
+    },
+    "prototype": {
+      "path": "prototype",
+      "purpose": null,
+      "fileCount": 7,
+      "lastAccessed": 1777614073822,
+      "keyFiles": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        "DEPLOY.md",
+        "alembic.ini",
+        "api-test.log"
+      ]
+    },
+    "prototype/data": {
+      "path": "prototype/data",
+      "purpose": "Data files",
+      "fileCount": 1,
+      "lastAccessed": 1777614073824,
+      "keyFiles": [
+        "zhice.db"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}
