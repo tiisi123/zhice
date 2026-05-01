@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Card, Tabs, Form, Input, Button, message, Typography, Spin } from 'antd'
-import { UserOutlined, LockOutlined, PhoneOutlined } from '@ant-design/icons'
+import { UserOutlined, LockOutlined, PhoneOutlined, SafetyOutlined } from '@ant-design/icons'
 import { postApi } from '../api/client'
 import { setAuth, type User } from '../api/auth'
 
@@ -39,7 +39,7 @@ export default function LoginPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleRegister = async (values: { phone: string; password: string; nickname: string }) => {
+  const handleRegister = async (values: { phone: string; password: string; nickname: string; invite_code: string }) => {
     setLoading(true)
     try {
       const res = await postApi<{ user: User; token: string }>('/auth/register', values)
@@ -117,6 +117,15 @@ export default function LoginPage() {
                     { min: 6, message: '至少 6 位' },
                   ]}>
                     <Input.Password size="large" prefix={<LockOutlined />} placeholder="密码（≥6 位）" />
+                  </Form.Item>
+                  <Form.Item name="invite_code" rules={[
+                    { required: true, message: '请输入邀请码' },
+                    { len: 6, message: '邀请码为 6 位' },
+                  ]}>
+                    <Input size="large" prefix={<SafetyOutlined />} placeholder="邀请码（6位）" maxLength={6}
+                      style={{ textTransform: 'uppercase' }}
+                      onChange={(e) => { e.target.value = e.target.value.toUpperCase() }}
+                    />
                   </Form.Item>
                   <Button type="primary" size="large" block htmlType="submit" loading={loading}>
                     注册

@@ -1,19 +1,20 @@
 import { lazy, Suspense } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import { Card, Tabs, Spin, Row, Col } from 'antd'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Card, Tabs, Spin, Row, Col, Button } from 'antd'
 import { CrownOutlined, CheckOutlined, RocketOutlined, StarOutlined, UnorderedListOutlined } from '@ant-design/icons'
 
 const VipPage = lazy(() => import('./VipPage'))
 const fallback = <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>
 
 const TASK_VALUES = [
-  { level: '基础版', color: '#999', desc: '我能快速看懂一个标的', tasks: ['个股 AI 结论', '风险提示', '基础研究池', '限次 AI 对话'] },
-  { level: '标准版', color: '#1677ff', desc: '我能完成一次完整投研', tasks: ['标的研究 + 产业链', '研究池异动提醒', 'AI 研究摘要', '报告归档', '短线/成长/价值工作台'] },
-  { level: '专业版', color: '#faad14', desc: '我能验证策略并沉淀投研体系', tasks: ['策略工坊全功能', '参数优化', '专业模板看板', '投委会 AI 备忘录', '深度报告库', '盘中实时推送'] },
+  { level: '基础版', color: '#999', plan: '', desc: '我能快速看懂一个标的', tasks: ['个股 AI 结论', '风险提示', '基础研究池', '限次 AI 对话'] },
+  { level: '标准版', color: '#1677ff', plan: 'standard_month', desc: '我能完成一次完整投研', tasks: ['标的研究 + 产业链', '研究池异动提醒', 'AI 研究摘要', '报告归档', '短线/成长/价值工作台'] },
+  { level: '专业版', color: '#faad14', plan: 'pro_month', desc: '我能验证策略并沉淀投研体系', tasks: ['策略工坊全功能', '参数优化', '专业模板看板', '投委会 AI 备忘录', '深度报告库', '盘中实时推送'] },
 ]
 
 export default function MembershipPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const tab = searchParams.get('tab') || 'value'
 
   return (
@@ -42,6 +43,12 @@ export default function MembershipPage() {
                           <CheckOutlined style={{ color: '#52c41a', marginRight: 8 }} />{t}
                         </div>
                       ))}
+                      {tv.plan && (
+                        <Button type="primary" block style={{ marginTop: 16 }}
+                          onClick={() => navigate(`/account/checkout?plan=${tv.plan}`)}>
+                          升级套餐
+                        </Button>
+                      )}
                     </Card>
                   </Col>
                 ))}

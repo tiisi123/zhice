@@ -29,6 +29,7 @@ const ResearchPoolPage = lazy(() => import('./pages/ResearchPoolPage'))
 const StrategyWorkshopPage = lazy(() => import('./pages/StrategyWorkshopPage'))
 const MyWorkspacePage = lazy(() => import('./pages/MyWorkspacePage'))
 const MembershipPage = lazy(() => import('./pages/MembershipPage'))
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
 // M001/S01/T06: dev-only demo of DataStatusBadge; S02 will消费同一组件
 const DemoBadgePage = lazy(() => import('./pages/DemoBadgePage'))
 
@@ -78,7 +79,9 @@ function App() {
           <Route path="/research-pool" element={<ResearchPoolPage />} />
           <Route path="/strategy-workshop" element={<StrategyWorkshopPage />} />
           <Route path="/my-workspace" element={<MyWorkspacePage />} />
-          <Route path="/membership" element={<MembershipPage />} />
+          <Route path="/membership" element={<Navigate to="/account/membership" replace />} />
+          <Route path="/account/membership" element={<MembershipPage />} />
+          <Route path="/account/checkout" element={<CheckoutPage />} />
           {/* 旧工具 URL 重定向 */}
           <Route path="/stock" element={<Navigate to="/stock-research?tab=diagnosis" replace />} />
           <Route path="/chain" element={<Navigate to="/stock-research?tab=chain" replace />} />
@@ -89,7 +92,7 @@ function App() {
           <Route path="/lab" element={<Navigate to="/strategy-workshop?tab=lab" replace />} />
           <Route path="/dashboard" element={<Navigate to="/my-workspace?tab=dashboard" replace />} />
           <Route path="/report-archive" element={<Navigate to="/my-workspace?tab=archive" replace />} />
-          <Route path="/vip" element={<Navigate to="/membership" replace />} />
+          <Route path="/vip" element={<Navigate to="/account/membership" replace />} />
           <Route path="/watchlist" element={<Navigate to="/research-pool" replace />} />
           <Route path="/broken-cases" element={<Navigate to="/verification?tab=broken" replace />} />
           <Route path="/gv-overview" element={<GrowthValueOverviewPage />} />
