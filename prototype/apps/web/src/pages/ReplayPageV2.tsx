@@ -232,6 +232,160 @@ function SectionStoryline({
   )
 }
 
+// ========== 五步作战流卡片 ==========
+function getSentimentLabel(level: string): { label: string; color: string } {
+  const map: Record<string, { label: string; color: string }> = {
+    '冰点': { label: '冰点', color: '#3b82f6' },
+    '低迷': { label: '低迷', color: '#60a5fa' },
+    '中性': { label: '中性', color: '#a3a3a3' },
+    '回暖': { label: '回暖', color: '#fb923c' },
+    '高潮': { label: '高潮', color: '#ef4444' },
+  }
+  return map[level] || { label: level || '未知', color: '#a3a3a3' }
+}
+
+function getRiskSignal(brokenRate: number, highBoardBroken: number): { label: string; color: string } {
+  if (brokenRate > 40 || highBoardBroken >= 3) return { label: '高风险', color: '#ef4444' }
+  if (brokenRate > 25 || highBoardBroken >= 2) return { label: '中风险', color: '#f97316' }
+  return { label: '低风险', color: '#22c55e' }
+}
+
+function BattleFlowCards({ summary, sectors, ladder, brokenData, strategy }: {
+  summary: MarketSummary
+  sectors: SectorRaw[]
+  ladder: LadderData | null
+  brokenData: AnyData
+  strategy: AnyData
+}) {
+  const step1 = useMemo(() => {
+    const sent = getSentimentLabel(summary.sentiment_level)
+    return {
+      title: '情绪',
+      icon: '🌡️',
+      metric: sent.label,
+      metricColor: sent.color,
+      desc: `涨停 ${summary.limit_up_count} · 炸板率 ${(summary.broken_rate || 0).toFixed(0)}%`,
+    }
+  }, [summary])
+
+  const step2 = useMemo(() => {
+    const top3 = sectors
+      .map(s => ({ name: pickName(s), intensity: pickNum(s, 'intensity'), change: pickNum(s, 'change_rate') }))
+      .filter(s => s.name !== '—')
+      .sort((a, b) => b.intensity - a.intensity)
+      .slice(0, 3)
+    return {
+      title: '主线',
+      icon: '🔥',
+      metric: top3[0]?.name || '未明确',
+      metricColor: '#fa541c',
+      desc: top3.length > 0
+        ? top3.map(t => `${t.name} ${t.intensity.toFixed(0)}`).join(' / ')
+        : '无明显合力',
+    }
+  }, [sectors])
+
+  const step3 = useMemo(() => {
+    if (!ladder) return { title: '龙头', icon: '👑', metric: '—', metricColor: '#f5222d', desc: '天梯数据加载中' }
+    let best: LimitUpStock | null = null
+    let bestBoard = 0
+    Object.values(ladder.tiers).forEach(stocks => {
+      stocks.forEach(s => {
+        const bc = s.board_count || 1
+        if (bc > bestBoard) { best = s; bestBoard = bc }
+      })
+    })
+    if (!best) return { title: '龙头', icon: '👑', metric: '暂无', metricColor: '#999', desc: '无涨停个股' }
+    const b = best as LimitUpStock
+    return {
+      title: '龙头',
+      icon: '👑',
+      metric: `${b.stock_name} ${bestBoard}板`,
+      metricColor: '#f5222d',
+      desc: b.first_plate_name ? `所属 ${b.first_plate_name}` : '',
+    }
+  }, [ladder])
+
+  const step4 = useMemo(() => {
+    const brRate = summary.broken_rate || 0
+    const highBoardBroken = brokenData?.by_reason
+      ? Object.values(brokenData.by_reason).flatMap((d: AnyData) =>
+          (d.cases || []).filter((c: AnyData) => (c.board_count || 0) >= 2)
+        ).length
+      : 0
+    const risk = getRiskSignal(brRate, highBoardBroken)
+    return {
+      title: '风险',
+      icon: '⚠️',
+      metric: risk.label,
+      metricColor: risk.color,
+      desc: `炸板率 ${brRate.toFixed(0)}% · 高位炸板 ${highBoardBroken}`,
+    }
+  }, [summary, brokenData])
+
+  const step5 = useMemo(() => {
+    const scenarios = strategy?.scenarios
+    if (!scenarios) return { title: '次日', icon: '📋', metric: '策略加载中', metricColor: '#1677ff', desc: '' }
+    const lines: string[] = []
+    if (scenarios.premium?.stocks?.length) lines.push(`溢价 ${scenarios.premium.stocks.length} 只`)
+    if (scenarios.dip?.stocks?.length) lines.push(`低吸 ${scenarios.dip.stocks.length} 只`)
+    if (scenarios.ladder?.stocks?.length) lines.push(`排板 ${scenarios.ladder.stocks.length} 只`)
+    return {
+      title: '次日',
+      icon: '📋',
+      metric: strategy.overall_advice || '三场景就绪',
+      metricColor: '#1677ff',
+      desc: lines.join(' · ') || '候选池生成中',
+    }
+  }, [strategy])
+
+  const steps = [step1, step2, step3, step4, step5]
+  const STEP_COLORS = ['#3b82f6', '#fa541c', '#f5222d', '#f97316', '#1677ff']
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #f0f5ff 0%, #fff 60%)',
+      border: '1px solid #d6e4ff', borderRadius: 14, padding: 16, marginBottom: 16,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 15, fontWeight: 700, color: '#262626' }}>🗺️ 五步作战流</span>
+        <span style={{ fontSize: 12, color: '#999' }}>情绪 → 主线 → 龙头 → 风险 → 次日</span>
+      </div>
+      <div style={{ display: 'flex', gap: 0, flexWrap: 'wrap' }}>
+        {steps.map((s, i) => (
+          <div key={s.title} style={{ display: 'flex', alignItems: 'stretch', flex: 1, minWidth: 140 }}>
+            <div style={{
+              flex: 1, background: '#fff', borderRadius: 10,
+              border: `1px solid ${STEP_COLORS[i]}22`, padding: '12px 14px',
+              boxShadow: `0 2px 6px ${STEP_COLORS[i]}10`, position: 'relative',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                <span style={{
+                  width: 22, height: 22, borderRadius: '50%', background: STEP_COLORS[i],
+                  color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700,
+                }}>{i + 1}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>{s.icon} {s.title}</span>
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: s.metricColor, lineHeight: 1.3, marginBottom: 4 }}>
+                {s.metric}
+              </div>
+              <div style={{ fontSize: 11, color: '#888', lineHeight: 1.5 }}>{s.desc}</div>
+              {i === 4 && <AIBadge style={{ marginTop: 6 }} />}
+            </div>
+            {i < 4 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', padding: '0 4px',
+                color: '#bbb', fontSize: 16, fontWeight: 700, flexShrink: 0,
+              }}>→</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ========== Section A · 市场温度 ==========
 function SectionTemperature({ summary }: { summary: MarketSummary }) {
   const theme = SENT_THEME[summary.sentiment_level] || SENT_THEME['中性']
@@ -1387,6 +1541,9 @@ export default function ReplayPageV2() {
       </div>
       <div data-feature="Storyline" data-feature-name="今日故事线（三幕叙事）">
         <SectionStoryline summary={summary} sectors={sectors} ladder={ladder} relay={relay} />
+      </div>
+      <div data-feature="BattleFlow" data-feature-name="五步作战流">
+        <BattleFlowCards summary={summary} sectors={sectors} ladder={ladder} brokenData={brokenData} strategy={strategy} />
       </div>
       <div data-feature="Contradiction" data-feature-name="矛盾信号告警">
         <ContradictionAlert rules={buildContradictionRules(summary, relay, capitalFlow)} />
