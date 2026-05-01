@@ -71,6 +71,7 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     # ── /api/rotation/*
     ("/api/rotation/known-themes", "transmission_rule_matrix"),
     ("/api/rotation/novelty", "kpl"),
+    ("/api/rotation/theme-history/{theme}", "kpl"),
     # ── /api/growth/* （景气度 / 价值持仓）
     ("/api/growth/macro", ""),  # tushare 或 static_macro_sample（按 token 切换）
     ("/api/growth/prosperity", "static_industry_prosperity"),
@@ -114,6 +115,10 @@ EXEMPT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/style/onboarding", "问卷写入"),
     ("/api/watchlist", "自选股 CRUD"),
     ("/api/lab/alert-rules POST", "Lab 写入操作"),
+    # ── /api/rotation/* POST 端点 —— 规则推演/预期差不走 KPL 数据源
+    ("/api/rotation/simulate POST", "规则推演模拟（纯规则矩阵计算）"),
+    ("/api/rotation/expectation-gap POST", "预期差评估（纯规则评分）"),
+    ("/api/rotation/expectation-gap/batch POST", "批量预期差评估"),
     # ── M001/S03/T04 业主 admin 后台 —— Cookie 录入 / 健康面板 / 告警 ack
     ("/api/admin/kpl-cookie", "admin metadata-only 不返 data"),
     ("/api/admin/kpl-cookie POST", "admin Cookie 写入操作"),
