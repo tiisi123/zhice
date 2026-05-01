@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom'
 import Markdown from 'react-markdown'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const SENT_COLORS: Record<string, string> = { '冰点': 'blue', '低迷': 'cyan', '中性': 'default', '回暖': 'orange', '高潮': 'red' }
@@ -120,6 +121,7 @@ export default function ReportArchivePage() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}><FileTextOutlined style={{ color: '#1677ff' }} /> 复盘报告存档</h2>
         <Button icon={<ReloadOutlined />} onClick={loadReports} size="small">刷新</Button>

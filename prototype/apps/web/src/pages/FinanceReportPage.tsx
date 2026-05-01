@@ -8,6 +8,7 @@ import * as echarts from 'echarts'
 import Markdown from 'react-markdown'
 import { fetchApi, postApi } from '../api/client'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const { TextArea } = Input
@@ -331,6 +332,7 @@ export default function FinanceReportPage() {
                         <Markdown>{aiText}</Markdown>
                       </div>
                     )}
+                    <AIBadge style={{ marginBottom: 8 }} />
                     <AIDisclaimer variant="inline" />
                   </Card>
                 ),

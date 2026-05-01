@@ -5,6 +5,7 @@ import { BulbOutlined, ExperimentOutlined, RobotOutlined, FireOutlined, SafetyOu
 import Markdown from 'react-markdown'
 import { fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 
 const { Title } = Typography
 
@@ -84,6 +85,7 @@ export default function RecommendPage() {
   return (
     <div>
       <Title level={3}><BulbOutlined /> AI 策略推荐 · M3-04</Title>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Disclaimer kind="recommend" />
 
       {/* 用户画像 + 市场情绪 */}

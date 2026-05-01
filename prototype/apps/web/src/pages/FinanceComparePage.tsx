@@ -5,6 +5,7 @@ import * as echarts from 'echarts'
 import { postApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 
 interface CompareRow {
   code: string
@@ -245,6 +246,7 @@ export default function FinanceComparePage() {
                 护城河分析
               </Button>
             </Space>
+            <AIBadge style={{ marginBottom: 8 }} />
             <AIDisclaimer variant="inline" />
           </Card>
         </>

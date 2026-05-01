@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, Row, Col, Button, Space, Input, Select, List, Tag, message, Empty, Modal, Alert } from 'antd'
 import { PlusOutlined, DeleteOutlined, SaveOutlined, DragOutlined } from '@ant-design/icons'
 import { fetchApi, postApi, deleteApi } from '../api/client'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 interface Widget {
@@ -111,6 +112,7 @@ export default function DashboardPage() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Alert
         type="info"
         showIcon

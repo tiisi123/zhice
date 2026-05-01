@@ -7,6 +7,7 @@ import type { Dayjs } from 'dayjs'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import MockBanner from '../components/MockBanner'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 interface SectorItem {
@@ -179,6 +180,7 @@ export default function ThemePage() {
   return (
     <div>
       <MockBanner show={isMock} />
+      <AIBadge style={{ marginBottom: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h2 style={{ margin: 0 }}>题材板块</h2>
@@ -234,7 +236,9 @@ export default function ThemePage() {
         </Space>
       </Card>
 
-      <div style={{ marginTop: 12, color: '#999', fontSize: 11, textAlign: 'center' }}>以上分析仅供参考，不构成投资建议。</div>
+      <div style={{ fontSize: 11, color: '#999', textAlign: 'center', marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+        本内容仅为板块/题材信息分析汇总，非荐板建议。
+      </div>
     </div>
   )
 }

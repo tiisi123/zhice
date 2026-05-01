@@ -3,6 +3,7 @@ import { Card, Col, Row, Input, Button, Descriptions, Tag, Table, Statistic, Spi
 import { RobotOutlined, RiseOutlined, FallOutlined, ThunderboltOutlined } from '@ant-design/icons'
 import { fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData, ApiMeta, DataStatus } from '../api/types'
 import { extractMetaList } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -80,6 +81,7 @@ export default function ValuationPage() {
   return (
     <div>
       <h2>估值分析</h2>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Disclaimer kind="forecast" />
       <div style={{ marginBottom: 16, display: 'flex', gap: 8 }}>
         <Input value={code} onChange={e => setCode(e.target.value)} style={{ width: 120 }} placeholder="股票代码" />

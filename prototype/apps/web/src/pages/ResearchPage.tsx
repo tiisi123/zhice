@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, Tabs, Table, Tag, Space, Input, Button, Select, Typography, Timeline, Alert, Spin } from 'antd'
 import { fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
@@ -205,6 +206,7 @@ export default function ResearchPage() {
   return (
     <div>
       <Title level={3}>研究中心</Title>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Disclaimer kind="ai" />
       <Paragraph type="secondary">覆盖：公司公告 · AI 财报解读 · 另类数据 · 卖方预期时间线。</Paragraph>
       <Tabs

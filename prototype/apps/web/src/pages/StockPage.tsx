@@ -8,6 +8,7 @@ import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import MockBanner from '../components/MockBanner'
 import { watchlistApi } from '../api/watchlist'
 import { message as antMessage } from 'antd'
@@ -159,6 +160,7 @@ function PatternMatchCard({ code, name }: { code: string; name: string }) {
               { title: '胜率', dataIndex: ['future', 'win_rate'], width: 60, align: 'right' as const, render: (v: number) => `${v}%` },
             ]}
           />
+          <AIBadge style={{ marginBottom: 8 }} />
           <AIDisclaimer variant="inline" />
         </>
       )}
@@ -289,7 +291,9 @@ export default function StockPage() {
             </Space>
           </Card>
 
-          <div style={{ marginTop: 12, color: '#999', fontSize: 11, textAlign: 'center' }}>以上分析仅供参考，不构成投资建议。</div>
+          <div style={{ fontSize: 11, color: '#999', textAlign: 'center', marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+            本内容仅为个股公开信息分析汇总，非荐股建议。投资决策请独立判断。
+          </div>
         </>
       )}
     </div>

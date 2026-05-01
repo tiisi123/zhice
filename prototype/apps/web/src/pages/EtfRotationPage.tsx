@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Card, Col, Row, Select, Space, Spin, Statistic, Table, Tabs, Tag } from 'antd'
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
+import AIBadge from '../components/AIBadge'
 import type { AnyData, DataStatus } from '../api/types'
 import { extractMeta } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -277,6 +278,7 @@ export default function EtfRotationPage() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       {(() => {
         const meta = extractMeta(dashboard)
         return (

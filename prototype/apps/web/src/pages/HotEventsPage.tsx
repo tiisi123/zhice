@@ -9,6 +9,7 @@ import Markdown from 'react-markdown'
 import { fetchApi, postApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 
 const { TextArea } = Input
 
@@ -207,6 +208,7 @@ export default function HotEventsPage() {
             <Markdown>{aiText || '*暂无分析结果*'}</Markdown>
           </div>
         )}
+        <AIBadge style={{ marginBottom: 8 }} />
         <AIDisclaimer variant="inline" />
       </Modal>
     </div>

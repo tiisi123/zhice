@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Card, Col, Row, Tag, Spin, Statistic, Badge, Switch, Tooltip, Space, Empty, Alert, Tabs, Table,
 } from 'antd'
+import AIBadge from '../components/AIBadge'
 import {
   ThunderboltOutlined, FireOutlined, CrownOutlined,
   WarningOutlined, RiseOutlined, EyeOutlined,
@@ -568,6 +569,7 @@ export default function IntradayPageV2() {
   return (
     <div>
       <MockBanner show={isMock} />
+      <AIBadge style={{ marginBottom: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0 }}>盘中盯盘 · {new Date().toLocaleDateString('zh-CN')}</h2>
         <Space>

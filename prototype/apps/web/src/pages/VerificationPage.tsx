@@ -8,6 +8,7 @@ import {
 import { fetchApi, postApi } from '../api/client'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData, ApiMeta, DataStatus } from '../api/types'
 import { extractMetaList } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -398,6 +399,7 @@ export default function VerificationPage() {
           return true
         })}
       />
+      <AIBadge style={{ marginBottom: 8 }} />
       <AIDisclaimer variant="inline" />
     </div>
   )

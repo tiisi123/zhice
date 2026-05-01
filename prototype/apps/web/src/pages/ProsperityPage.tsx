@@ -4,6 +4,7 @@ import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import { RobotOutlined } from '@ant-design/icons'
+import AIBadge from '../components/AIBadge'
 import type { AnyData, DataStatus } from '../api/types'
 import { extractMeta } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -305,6 +306,7 @@ function ChainProsperityTab() {
 export default function ProsperityPage() {
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Title level={3}>景气度中心</Title>
       <Paragraph type="secondary">覆盖：扩散指数 · 拐点预警 · 宏观传导 · 产业链传导 · AI 周报 · 历史周期回看。</Paragraph>
       <Tabs

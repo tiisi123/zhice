@@ -6,6 +6,7 @@ import * as echarts from 'echarts'
 import { fetchApi, postApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const { TextArea } = Input
@@ -118,6 +119,7 @@ export default function StrategyPage() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Disclaimer kind="backtest" />
       <Row gutter={16}>
         <Col span={10}>

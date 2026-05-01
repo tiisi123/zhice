@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import type { MarketSummary, LadderData, LimitUpStock, AnyData, ApiMeta, DataStatus } from '../api/types'
 import { extractMetaList } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -1053,6 +1054,7 @@ function SectionTomorrow({ summary, ladder: _ladder, sectors, date }: {
           </Button>
         </Space>
       </div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <AIDisclaimer variant="compact" />
     </Card>
   )

@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Tabs, Spin } from 'antd'
+import { Tabs, Spin, Alert } from 'antd'
 import { ExperimentOutlined, BulbOutlined, BuildOutlined, ThunderboltOutlined, ControlOutlined, LineChartOutlined } from '@ant-design/icons'
+import AIBadge from '../components/AIBadge'
 
 const RecommendPage = lazy(() => import('./RecommendPage'))
 const StrategyBuilderPage = lazy(() => import('./StrategyBuilderPage'))
@@ -20,6 +21,14 @@ export default function StrategyWorkshopPage() {
         <ExperimentOutlined style={{ color: '#722ed1' }} /> 策略工坊
         <span style={{ fontSize: 13, color: '#999', fontWeight: 400 }}>· 从想法到可验证策略</span>
       </h2>
+      <AIBadge style={{ marginBottom: 8 }} />
+      <Alert
+        type="warning"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="蒙特卡洛模拟提示"
+        description="当前为蒙特卡洛模拟数据（非真实回测），结果仅供策略思路参考"
+      />
       <Tabs
         activeKey={tab}
         onChange={(k) => setSearchParams({ tab: k }, { replace: true })}

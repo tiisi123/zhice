@@ -11,6 +11,7 @@ import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import { AskAIChip, SectionHeader } from '../components/smart'
 import type { ApiMeta, DataStatus } from '../api/types'
 import { extractMeta } from '../api/useApiMeta'
@@ -464,6 +465,7 @@ export default function ThemeWorkshopPage() {
           },
         ]}
       />
+      <AIBadge style={{ marginBottom: 8 }} />
       <AIDisclaimer variant="inline" />
     </div>
   )

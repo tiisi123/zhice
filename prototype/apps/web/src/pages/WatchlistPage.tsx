@@ -7,6 +7,7 @@ import { PlusOutlined, ReloadOutlined, EyeOutlined, BellOutlined, EditOutlined, 
 import { Link } from 'react-router-dom'
 import { watchlistApi, type WatchItem, type AlertHit } from '../api/watchlist'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 
 const KIND_TAG: Record<string, { color: string; label: string }> = {
   limit_up: { color: 'red', label: '涨停' },
@@ -205,6 +206,7 @@ export default function WatchlistPage() {
         message="提醒会以右上角通知方式弹出"
         description="未登录或将本地 zhice_alert_enabled 设为 0 可关闭。轮询周期 30 秒，命中后同会话同事件不重复。"
       />
+      <AIBadge style={{ marginBottom: 8 }} />
       <AIDisclaimer variant="inline" />
 
       <Modal

@@ -7,6 +7,7 @@ import * as echarts from 'echarts'
 import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 interface SentimentRecord {
@@ -394,6 +395,7 @@ export default function SentimentPageV2() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0 }}>情绪周期</h2>
         <Select

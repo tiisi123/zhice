@@ -5,6 +5,7 @@ import {
 import { PlusOutlined, DeleteOutlined, ExperimentOutlined, CopyOutlined } from '@ant-design/icons'
 import { postApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
@@ -152,6 +153,7 @@ export default function StrategyBuilderPage() {
     <div>
       <Title level={3}>可视化策略构建器</Title>
       <Paragraph type="secondary">通过条件卡片拖拽式配置，实时生成标准化 DSL。也可结合 AI 自然语言生成。</Paragraph>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Disclaimer kind="ai" />
 
       <Row gutter={16}>

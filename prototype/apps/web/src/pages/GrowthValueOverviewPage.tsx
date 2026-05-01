@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import { AskAIChip } from '../components/smart'
 import type { AnyData } from '../api/types'
 
@@ -222,6 +223,7 @@ export default function GrowthValueOverviewPage() {
         </Row>
       </Card>
 
+      <AIBadge style={{ marginBottom: 8 }} />
       <AIDisclaimer variant="inline" />
     </div>
   )

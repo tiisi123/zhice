@@ -4,6 +4,7 @@ import { RobotOutlined, SendOutlined, SaveOutlined, BulbOutlined, ClearOutlined,
 import Markdown from 'react-markdown'
 import { fetchApi, postApi } from '../api/client'
 import Disclaimer from './Disclaimer'
+import AIBadge from './AIBadge'
 import type { AnyData } from '../api/types'
 
 const { TextArea } = Input
@@ -238,6 +239,7 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
       open={open}
       onClose={onClose}
     >
+      <AIBadge style={{ marginBottom: 8 }} />
       <Disclaimer kind="ai" style={{ marginBottom: 8 }} />
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabs} />
     </Drawer>

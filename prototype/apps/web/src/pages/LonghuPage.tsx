@@ -3,6 +3,7 @@ import { Alert, Card, Table, Tag, Space, DatePicker, Button, Input, Empty } from
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs, { Dayjs } from 'dayjs'
 import { fetchApi } from '../api/client'
+import AIBadge from '../components/AIBadge'
 import type { AnyData, ApiMeta, DataStatus } from '../api/types'
 import { extractMeta } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -65,6 +66,7 @@ export default function LonghuPage() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <Space style={{ marginBottom: 16 }}>
         <DatePicker value={date} onChange={(d) => d && setDate(d)} />
         <Input

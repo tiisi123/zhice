@@ -5,6 +5,7 @@ import {
 import { DeleteOutlined, EditOutlined, PlusOutlined, ExperimentOutlined, BellOutlined } from '@ant-design/icons'
 import { fetchApi, postApi, deleteApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const { Title, Paragraph } = Typography
@@ -296,6 +297,14 @@ export default function LabPage() {
   return (
     <div>
       <Title level={3}>策略实验室</Title>
+      <AIBadge style={{ marginBottom: 8 }} />
+      <Alert
+        type="warning"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="蒙特卡洛模拟提示"
+        description="当前为蒙特卡洛模拟数据（非真实回测），结果仅供策略思路参考"
+      />
       <Disclaimer kind="backtest" />
       <Tabs
         items={[

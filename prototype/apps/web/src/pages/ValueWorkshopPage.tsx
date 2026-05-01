@@ -10,6 +10,7 @@ import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const ValuePage = lazy(() => import('./ValuePage'))
@@ -299,6 +300,7 @@ export default function ValueWorkshopPage() {
           },
         ]}
       />
+      <AIBadge style={{ marginBottom: 8 }} />
       <AIDisclaimer variant="inline" />
     </div>
   )

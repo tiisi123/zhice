@@ -4,6 +4,7 @@ import { ApartmentOutlined, RobotOutlined, ClockCircleOutlined } from '@ant-desi
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
 import { askAI } from '../api/copilot'
+import AIBadge from '../components/AIBadge'
 import type { AnyData } from '../api/types'
 
 const STREAM_COLORS: Record<string, string> = { '上游': '#1677ff', '中游': '#52c41a', '下游': '#fa8c16', '个股': '#d9d9d9' }
@@ -66,6 +67,7 @@ export default function ChainPage() {
 
   return (
     <div>
+      <AIBadge style={{ marginBottom: 8 }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <h2 style={{ margin: 0 }}><ApartmentOutlined style={{ color: '#722ed1' }} /> 产业链图谱</h2>
         <Select value={selected} onChange={setSelected} style={{ width: 180 }}
@@ -121,7 +123,9 @@ export default function ChainPage() {
         </Col>
       </Row>
 
-      <div style={{ marginTop: 12, color: '#999', fontSize: 11, textAlign: 'center' }}>以上分析仅供参考，不构成投资建议。</div>
+      <div style={{ fontSize: 11, color: '#999', textAlign: 'center', marginTop: 16, borderTop: '1px solid #f0f0f0', paddingTop: 8 }}>
+        本内容仅为产业链信息分析汇总，非荐股建议。
+      </div>
     </div>
   )
 }

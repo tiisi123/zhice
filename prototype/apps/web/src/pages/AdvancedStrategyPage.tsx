@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Card, Col, Row, Space, Table, Statistic, Button, Select, Input, message, Popconfirm } from 'antd'
+import { Card, Col, Row, Space, Table, Statistic, Button, Select, Input, message, Popconfirm, Alert } from 'antd'
 import { postApi, deleteApi, fetchApi } from '../api/client'
 import Disclaimer from '../components/Disclaimer'
+import AIBadge from '../components/AIBadge'
 import type { AnyData, DataStatus } from '../api/types'
 import { extractMeta } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
@@ -116,6 +117,14 @@ export default function AdvancedStrategyPage() {
   return (
     <div>
       <h2>高级策略工具</h2>
+      <AIBadge style={{ marginBottom: 8 }} />
+      <Alert
+        type="warning"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message="蒙特卡洛模拟提示"
+        description="当前为蒙特卡洛模拟数据（非真实回测），结果仅供策略思路参考"
+      />
       <Disclaimer kind="backtest" />
       <Row gutter={16}>
         <Col span={12}>
