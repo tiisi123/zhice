@@ -4,6 +4,7 @@ import { Card, Button, Input, Typography, Space, Tooltip, Divider, message } fro
 import { CrownOutlined, LockOutlined, GiftOutlined } from '@ant-design/icons'
 import { postApi, fetchApi } from '../api/client'
 import { setUser, type User } from '../api/auth'
+import PaymentTermsModal from '../components/PaymentTermsModal'
 
 const { Title, Text, Paragraph } = Typography
 
@@ -21,15 +22,31 @@ export default function CheckoutPage() {
 
   const [redeemCode, setRedeemCode] = useState('')
   const [redeemLoading, setRedeemLoading] = useState(false)
+  const [showPaymentTerms, setShowPaymentTerms] = useState(false)
+  const [paymentTermsAccepted, setPaymentTermsAccepted] = useState(false)
 
-  const handleRedeem = async () => {
+  const handleRedeem = () => {
     if (!redeemCode.trim()) {
       message.warning('请输入邀请码')
       return
     }
+    if (!paymentTermsAccepted) {
+      setShowPaymentTerms(true)
+      return
+    }
+    void doRedeem()
+  }
+
+  const handlePaymentTermsAccepted = () => {
+    setShowPaymentTerms(false)
+    setPaymentTermsAccepted(true)
+    void doRedeem()
+  }
+
+  const doRedeem = async () => {
     setRedeemLoading(true)
     try {
-      await postApi('/payment/redeem', { code: redeemCode.trim().toUpperCase() })
+      await postApi('/payment/redeem', { code: redeemCode.trim().toUpperCase(), payment_terms_accepted: true })
       message.success('开通成功')
       try {
         const me = await fetchApi<User>('/auth/me')
@@ -87,6 +104,11 @@ export default function CheckoutPage() {
           </Button>
         </Space.Compact>
       </Card>
+      <PaymentTermsModal
+        open={showPaymentTerms}
+        onAccept={handlePaymentTermsAccepted}
+        onClose={() => setShowPaymentTerms(false)}
+      />
     </div>
   )
 }

@@ -4,6 +4,7 @@ import { Card, Tabs, Form, Input, Button, message, Typography, Spin } from 'antd
 import { UserOutlined, LockOutlined, PhoneOutlined, SafetyOutlined } from '@ant-design/icons'
 import { postApi } from '../api/client'
 import { setAuth, type User } from '../api/auth'
+import RegisterTermsModal from '../components/RegisterTermsModal'
 
 const { Title, Paragraph } = Typography
 const TEST_LOGIN = { phone: 'admin', password: 'Zhice@2026test' }
@@ -14,6 +15,8 @@ export default function LoginPage() {
   const location = useLocation()
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<'login' | 'register'>('login')
+  const [showTermsModal, setShowTermsModal] = useState(false)
+  const [pendingRegister, setPendingRegister] = useState<{ phone: string; password: string; nickname: string; invite_code: string } | null>(null)
   const autoLoginStarted = useRef(false)
 
   const nextUrl = new URLSearchParams(location.search).get('next') || '/replay'
@@ -39,10 +42,17 @@ export default function LoginPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleRegister = async (values: { phone: string; password: string; nickname: string; invite_code: string }) => {
+  const handleRegister = (values: { phone: string; password: string; nickname: string; invite_code: string }) => {
+    setPendingRegister(values)
+    setShowTermsModal(true)
+  }
+
+  const handleTermsAccepted = async () => {
+    if (!pendingRegister) return
+    setShowTermsModal(false)
     setLoading(true)
     try {
-      const res = await postApi<{ user: User; token: string }>('/auth/register', values)
+      const res = await postApi<{ user: User; token: string }>('/auth/register', { ...pendingRegister, terms_accepted: true })
       setAuth(res.token, res.user)
       message.success('注册成功，开始体验')
       void navigate('/onboarding', { replace: true })
@@ -50,6 +60,7 @@ export default function LoginPage() {
       message.error((e as Error)?.message || '注册失败')
     } finally {
       setLoading(false)
+      setPendingRegister(null)
     }
   }
 
@@ -140,6 +151,7 @@ export default function LoginPage() {
           投资有风险，入市需谨慎。平台内容仅供研究参考。
         </Paragraph>
       </Card>
+      <RegisterTermsModal open={showTermsModal} onAccept={handleTermsAccepted} />
     </div>
   )
 }
