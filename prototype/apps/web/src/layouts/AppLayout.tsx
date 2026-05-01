@@ -2,12 +2,13 @@ import { useEffect, useState, useMemo } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { Layout, Menu, Button, Space, Grid } from 'antd'
 import {
-  DashboardOutlined, BarChartOutlined, StockOutlined, TagsOutlined,
+  DashboardOutlined, BarChartOutlined, StockOutlined,
   ExperimentOutlined, RobotOutlined, WarningOutlined,
   RiseOutlined, FundOutlined,
   CrownOutlined, AppstoreOutlined,
   BuildOutlined,
   EyeOutlined,
+  FireOutlined,
 } from '@ant-design/icons'
 import AICopilot from '../components/AICopilot'
 import UserMenu from '../components/UserMenu'
@@ -18,24 +19,28 @@ import { useAnomalyAlerts } from '../hooks/useAnomalyAlerts'
 const { Sider, Header, Content } = Layout
 
 const menuItems = [
-  { key: 'short', label: '短线作战', type: 'group' as const, children: [
+  { key: 'short', label: '短线', type: 'group' as const, children: [
     { key: '/replay', icon: <DashboardOutlined />, label: '收盘复盘' },
     { key: '/intraday', icon: <BarChartOutlined />, label: '盘中盯盘' },
-    { key: '/theme-workshop', icon: <TagsOutlined />, label: '题材工坊' },
+  ]},
+  { key: 'hot', label: '热点', type: 'group' as const, children: [
+    { key: '/theme-workshop', icon: <FireOutlined />, label: '题材工坊' },
     { key: '/verification', icon: <WarningOutlined />, label: '验证中心' },
   ]},
-  { key: 'growth-value', label: '成长/价值', type: 'group' as const, children: [
+  { key: 'growth', label: '成长', type: 'group' as const, children: [
     { key: '/gv-overview', icon: <DashboardOutlined />, label: '投研总览' },
     { key: '/growth-workshop', icon: <RiseOutlined />, label: '成长景气' },
+  ]},
+  { key: 'value', label: '价值', type: 'group' as const, children: [
     { key: '/value-workshop', icon: <FundOutlined />, label: '价值基本面' },
   ]},
-  { key: 'tools', label: '投研工具', type: 'group' as const, children: [
+  { key: 'tools', label: '工具', type: 'group' as const, children: [
     { key: '/tools-home', icon: <AppstoreOutlined />, label: '投研工具台' },
     { key: '/stock-research', icon: <StockOutlined />, label: '标的研究' },
     { key: '/research-pool', icon: <EyeOutlined />, label: '研究池' },
     { key: '/strategy-workshop', icon: <ExperimentOutlined />, label: '策略工坊' },
     { key: '/my-workspace', icon: <BuildOutlined />, label: '我的工作台' },
-    { key: '/membership', icon: <CrownOutlined />, label: '会员' },
+    { key: '/account/membership', icon: <CrownOutlined />, label: '会员' },
   ]},
   { key: 'ops', label: '运营管理', type: 'group' as const, children: [
     { key: '/feature-map', icon: <EyeOutlined />, label: '功能地图' },
@@ -49,7 +54,7 @@ function getSelectedKey(pathname: string): string[] {
   if (pathname.startsWith('/strategy-workshop') || pathname === '/strategy' || pathname === '/strategy-builder'
       || pathname === '/advanced-strategy' || pathname === '/recommend' || pathname === '/lab') return ['/strategy-workshop']
   if (pathname.startsWith('/my-workspace') || pathname === '/dashboard' || pathname === '/report-archive') return ['/my-workspace']
-  if (pathname === '/vip' || pathname.startsWith('/membership')) return ['/membership']
+  if (pathname === '/vip' || pathname.startsWith('/membership') || pathname.startsWith('/account/membership')) return ['/account/membership']
   // 短线作战工作台映射
   if (pathname === '/sentiment') return ['/replay']
   if (pathname.startsWith('/theme-workshop') || pathname.startsWith('/theme')
