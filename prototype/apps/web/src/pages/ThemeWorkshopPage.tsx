@@ -4,8 +4,8 @@ import {
   Card, Col, Row, Tag, Spin, Tabs, Space, Button, Empty, Badge, message, Alert,
 } from 'antd'
 import {
-  TagsOutlined, ThunderboltOutlined, NodeIndexOutlined,
-  FireOutlined, RobotOutlined, RiseOutlined,
+  TagsOutlined, ThunderboltOutlined,
+  FireOutlined, RobotOutlined, RiseOutlined, RadarChartOutlined,
 } from '@ant-design/icons'
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
@@ -335,10 +335,90 @@ function EventTimeline({ onSelectTheme }: { onSelectTheme?: (name: string) => vo
   )
 }
 
+// ========== 题材周期雷达分布 ==========
+const PHASE_DEFS: { key: string; label: string; color: string; icon: string }[] = [
+  { key: '发酵', label: '发酵', color: '#22c55e', icon: '🌱' },
+  { key: '启动', label: '启动', color: '#3b82f6', icon: '🚀' },
+  { key: '高潮', label: '高潮', color: '#ef4444', icon: '🔥' },
+  { key: '退潮', label: '退潮', color: '#f97316', icon: '🌊' },
+  { key: '冷却', label: '冷却', color: '#8b5cf6', icon: '❄️' },
+  { key: '中性', label: '中性', color: '#999', icon: '⚪' },
+]
+
+function CycleRadarView({ cycles }: { cycles: Record<string, CycleItem> }) {
+  const items = Object.values(cycles)
+  const total = items.length || 1
+
+  const grouped: Record<string, CycleItem[]> = {}
+  for (const def of PHASE_DEFS) grouped[def.key] = []
+  for (const c of items) {
+    const phase = c.phase || '中性'
+    if (!grouped[phase]) grouped[phase] = []
+    grouped[phase].push(c)
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>
+        <RadarChartOutlined style={{ marginRight: 6, color: '#1677ff' }} />
+        题材周期雷达 · 6 阶段分布
+      </div>
+
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        {PHASE_DEFS.map(def => {
+          const count = grouped[def.key]?.length || 0
+          const pct = ((count / total) * 100).toFixed(1)
+          return (
+            <Col key={def.key} xs={12} sm={8} md={4}>
+              <Card size="small" bodyStyle={{ textAlign: 'center', padding: '12px 8px' }}
+                style={{ borderTop: `3px solid ${def.color}` }}>
+                <div style={{ fontSize: 20 }}>{def.icon}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: def.color }}>{def.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>{count}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>{pct}%</div>
+              </Card>
+            </Col>
+          )
+        })}
+      </Row>
+
+      {PHASE_DEFS.map(def => {
+        const list = grouped[def.key] || []
+        if (list.length === 0) return null
+        return (
+          <div key={def.key} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: def.color }}>
+              {def.icon} {def.label}
+              <Tag color="default" style={{ marginLeft: 8, fontSize: 11 }}>{list.length} 个</Tag>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {list.sort((a, b) => b.score - a.score).map(c => (
+                <Card key={c.name} size="small" bodyStyle={{ padding: '8px 12px' }}
+                  style={{ minWidth: 180, flex: '0 0 auto' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{c.name}</span>
+                    {c.trend === 'new' && <Tag color="cyan" style={{ fontSize: 10 }}>新题材</Tag>}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>
+                    热度 {c.score} · 趋势 {c.trend} · 活跃 {c.appearance_days}天
+                  </div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 2 }}>{c.advice}</div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+
+      {items.length === 0 && <Empty description="暂无题材周期数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />}
+    </div>
+  )
+}
+
 // ========== 主组件 ==========
 export default function ThemeWorkshopPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = searchParams.get('tab') || 'workshop'
+  const tab = searchParams.get('tab') || 'sectors'
   const [sectors, setSectors] = useState<Sector[]>([])
   const [cycles, setCycles] = useState<Record<string, CycleItem>>({})
   const [selected, setSelected] = useState('')
@@ -412,10 +492,20 @@ export default function ThemeWorkshopPage() {
         type="card"
         items={[
           {
-            key: 'workshop',
-            label: <span><TagsOutlined /> 主线排行</span>,
+            key: 'events',
+            label: <span><ThunderboltOutlined /> 事件时间线</span>,
+            children: <HotEventsInline />,
+          },
+          {
+            key: 'sectors',
+            label: <span><FireOutlined /> 板块强度</span>,
             children: (
               <>
+                {meta && (
+                  <div style={{ marginBottom: 12 }}>
+                    <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+                  </div>
+                )}
                 <Card size="small" title={<SectionHeader icon={<RiseOutlined />} title="题材热力图" subtitle="气泡大小=涨停数 颜色=周期阶段" />} style={{ marginBottom: 16 }} bodyStyle={{ padding: 8 }}>
                   <ThemeHeatBubble sectors={sectors} cycles={cycles} onSelect={handleSelect} />
                 </Card>
@@ -439,29 +529,23 @@ export default function ThemeWorkshopPage() {
             ),
           },
           {
-            key: 'events',
-            label: <span><ThunderboltOutlined /> 事件时间线</span>,
-            children: <HotEventsInline />,
-          },
-          {
-            key: 'lifecycle',
-            label: <span><FireOutlined /> 题材生命周期</span>,
-            children: <ProsperityInline />,
-          },
-          {
-            key: 'chain',
-            label: <span><NodeIndexOutlined /> 产业链传导</span>,
-            children: <ChainInline />,
-          },
-          {
             key: 'rotation',
-            label: <span><NodeIndexOutlined /> 轮动推演</span>,
+            label: <span><RiseOutlined /> 轮动推演</span>,
             children: <RotationInline />,
           },
           {
-            key: 'history',
-            label: <span><RiseOutlined /> 历史复盘</span>,
-            children: <ProsperityInline />,
+            key: 'cycle',
+            label: <span><RadarChartOutlined /> 题材周期</span>,
+            children: (
+              <>
+                {meta && (
+                  <div style={{ marginBottom: 12 }}>
+                    <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />
+                  </div>
+                )}
+                <CycleRadarView cycles={cycles} />
+              </>
+            ),
           },
         ]}
       />
@@ -475,10 +559,6 @@ import { lazy, Suspense } from 'react'
 import type { AnyData } from '../api/types'
 const HotEventsPageLazy = lazy(() => import('./HotEventsPage'))
 const RotationPageLazy = lazy(() => import('./RotationPage'))
-const ProsperityPageLazy = lazy(() => import('./ProsperityPage'))
-const ChainPageLazy = lazy(() => import('./ChainPage'))
 const fallback = <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>
 function HotEventsInline() { return <Suspense fallback={fallback}><HotEventsPageLazy /></Suspense> }
 function RotationInline() { return <Suspense fallback={fallback}><RotationPageLazy /></Suspense> }
-function ProsperityInline() { return <Suspense fallback={fallback}><ProsperityPageLazy /></Suspense> }
-function ChainInline() { return <Suspense fallback={fallback}><ChainPageLazy /></Suspense> }
