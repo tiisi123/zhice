@@ -166,3 +166,105 @@ jobs:
           python-version: "3.11"
       - name: Run check_no_mock.py
         run: python prototype/scripts/check_no_mock.py
+
+  playwright:
+    name: Playwright Happy-Path（E2E 5 步）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: prototype/apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: prototype/apps/web/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npx playwright test
+
+  smoke:
+    name: Smoke Test（API + Web + 契约 ×3）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0.36
+        env:
+          MYSQL_ROOT_PASSWORD: ci-root-pass
+          MYSQL_DATABASE: zhice
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ZHICE_JWT_SECRET: ci-jwt-secret-not-real-prod
+      ZHICE_ADMIN_PASSWORD: ci-admin-pass
+      DATABASE_URL: mysql+pymysql://root:ci-root-pass@127.0.0.1:3306/zhice
+      DEBUG: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: prototype/apps/web/package-lock.json
+      - name: pip install prototype
+        run: pip install -e prototype
+      - name: alembic upgrade head
+        working-directory: prototype
+        run: alembic upgrade head
+      - name: uvicorn 后台启动
+        working-directory: prototype
+        run: nohup uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 > /tmp/uvicorn.log 2>&1 &
+      - name: 等待 uvicorn ready
+        run: |
+          for i in $(seq 1 20); do
+            if curl -sf http://127.0.0.1:8000/api/health > /dev/null; then
+              echo "uvicorn ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "uvicorn 未在 20s 内响应 /api/health" >&2
+          tail -n 80 /tmp/uvicorn.log >&2 || true
+          exit 1
+      - name: npm ci + build + preview 后台启动
+        working-directory: prototype/apps/web
+        run: |
+          npm ci
+          npm run build
+          nohup npx vite preview --port 5173 > /tmp/vite-preview.log 2>&1 &
+      - name: 等待 vite preview ready
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://127.0.0.1:5173/ > /dev/null; then
+              echo "vite preview ready after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "vite preview 未在 15s 内响应" >&2
+          tail -n 40 /tmp/vite-preview.log >&2 || true
+          exit 1
+      - name: smoke_test.py ×3
+        working-directory: prototype
+        run: |
+          for round in 1 2 3; do
+            echo "=== Smoke round $round ==="
+            python scripts/smoke_test.py || exit 1
+          done
+      - name: 失败时打印日志
+        if: failure()
+        run: |
+          echo "=== uvicorn ===" && tail -n 200 /tmp/uvicorn.log || true
+          echo "=== vite preview ===" && tail -n 100 /tmp/vite-preview.log || true
