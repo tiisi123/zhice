@@ -405,7 +405,7 @@ make deploy-rebuild
 - 报告归档、研究池、看板等用户数据必须按 `user_id` 或公开/私有权限隔离；
 - 真实支付和高并发商业化上线前应评估 PostgreSQL/Redis 扩容路径（M001 单 worker + 单 MySQL 仅供 50 用户内测）；
 - 短线工作台 KPL 数据源 Cookie 续期机制已落地（M001 S03）；
-- 5xx 告警邮件已实装（M001 S08）。
+- 5xx 突增告警已实装（M001 S08）：`RequestLogMiddleware` 在 `apps/api/main.py` 中维护线程安全的 `_5xx_window` 滑动窗口（`collections.deque(maxlen=1000)` + `threading.Lock`），每次 500+ 响应追加时间戳。`apps/api/services/five_xx_monitor.py::check_5xx_surge()` 由 APScheduler 每 1 分钟调用：若 5 分钟内 ≥10 次 5xx，写入 `system_alerts`（`kind='api_5xx_surge'`）并发送 SMTP 告警邮件给业主；同类告警去重（`_persist_alert` 仅在无未解决记录时 INSERT + 发邮件，重复则 UPDATE 不重发）；当 5xx 计数降回阈值以下且有未解决告警时，自动 resolve + 发送恢复邮件。`GET /api/health` 响应中 `five_xx_recent` 字段可实时查看当前窗口内 5xx 计数。
 
 详细风险见 `docs/用户与商业化风险清单.md`。
 
