@@ -157,6 +157,11 @@ def set_kpl_cookie(cookie: str, updated_by: int | None = None) -> None:
     logger.info(
         "kpl_cookie updated by user_id=%s len=%d", updated_by, len(cookie)
     )
+    try:
+        from packages.connectors.registry import clear_kpl_caches
+        clear_kpl_caches()
+    except ImportError:
+        pass
 
 
 def get_kpl_cookie_metadata() -> dict:

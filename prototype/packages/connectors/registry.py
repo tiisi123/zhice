@@ -21,7 +21,7 @@ def _read_kpl_cookie() -> str:
     sentinel `{"_error": "cookie_missing"}` instead of hitting upstream.
     """
     try:
-        from apps.api.cookie_provider import get_kpl_cookie  # type: ignore
+        from apps.api.services.cookie_provider import get_kpl_cookie
     except Exception:
         get_kpl_cookie = None
     if get_kpl_cookie is not None:
@@ -74,6 +74,13 @@ def get_kpl_history() -> KplHistoryClient:
         device_id=settings.kpl_device_id,
         version=settings.kpl_version,
     )
+
+
+def clear_kpl_caches() -> None:
+    """Evict cached KPL client singletons so the next call picks up a fresh cookie."""
+    get_kpl.cache_clear()
+    get_kpl_realtime.cache_clear()
+    get_kpl_history.cache_clear()
 
 
 @lru_cache(maxsize=1)
