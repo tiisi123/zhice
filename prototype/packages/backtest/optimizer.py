@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from itertools import product
 
 from .dsl_schema import StrategyDSL, ExitConditions
@@ -75,9 +74,6 @@ class SimulatedTrader:
 
     def next_day(self):
         self.day += 1
-        for pos in self.positions:
-            pos["price"] *= (1 + random.uniform(-0.03, 0.03))
-            pos["price"] = round(pos["price"], 2)
 
     def status(self) -> dict:
         pos_value = sum(p["price"] * p["shares"] for p in self.positions)
