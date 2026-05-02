@@ -420,6 +420,18 @@ if _HAS_APSCHEDULER:
         coalesce=True,
     )
 
+    # M001/S08/T01: 5xx surge alerting — check every minute.
+    from apps.api.services.five_xx_monitor import check_5xx_surge
+
+    scheduler.add_job(
+        check_5xx_surge,
+        IntervalTrigger(minutes=1),
+        id="check_5xx_surge",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
 
 def start_scheduler():
     if not _HAS_APSCHEDULER:

@@ -68,3 +68,38 @@ def cookie_recovery_email_body(probe_kind: str) -> str:
         "\n"
         f"{_SIGNATURE}\n"
     )
+
+
+def five_xx_surge_email_body(count: int, window_minutes: int) -> str:
+    """Return the Chinese body sent when 5xx responses exceed the surge threshold."""
+    return (
+        "# 【智策】API 5xx 突增告警\n"
+        "\n"
+        f"告警时间：{_now_str()}\n"
+        f"- 过去 {window_minutes} 分钟内 5xx 响应数：{count}\n"
+        "- 触发阈值：≥10 次\n"
+        "\n"
+        "## 处置步骤\n"
+        "\n"
+        "1. 检查容器日志：`docker logs zhice-api --tail 200`；\n"
+        "2. 查看 `/api/health` 确认数据库和各组件状态；\n"
+        "3. 如为瞬时异常（上游超时等），观察后续 1 分钟是否自动恢复；\n"
+        "4. 如持续 5xx，重启服务：`docker restart zhice-api`；\n"
+        "5. 恢复后系统会自动发送恢复邮件。\n"
+        "\n"
+        f"{_SIGNATURE}\n"
+    )
+
+
+def five_xx_recovery_email_body() -> str:
+    """Return the Chinese body sent when 5xx surge resolves."""
+    return (
+        "# 【智策】API 5xx 突增已恢复\n"
+        "\n"
+        f"恢复时间：{_now_str()}\n"
+        "- 5xx 响应已降至阈值以下，服务恢复正常。\n"
+        "\n"
+        "本邮件用于关闭告警状态，无需操作。\n"
+        "\n"
+        f"{_SIGNATURE}\n"
+    )

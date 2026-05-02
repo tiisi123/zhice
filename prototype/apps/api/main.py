@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import collections
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -45,6 +47,21 @@ from . import db  # noqa: F401  # trigger engine lazy build + best-effort admin 
 
 logger = logging.getLogger("zhice.api")
 
+_5xx_window: collections.deque[float] = collections.deque(maxlen=1000)
+_5xx_lock = threading.Lock()
+
+
+def get_5xx_count(window_seconds: int = 300) -> int:
+    cutoff = time.time() - window_seconds
+    with _5xx_lock:
+        return sum(1 for ts in _5xx_window if ts >= cutoff)
+
+
+def _reset_5xx_window_for_tests() -> None:
+    with _5xx_lock:
+        _5xx_window.clear()
+
+
 # Startup validation has already run inside Settings.validate_required_secrets
 # at config import time; reaching this line means the gate passed. Log the
 # observable shape (debug flag + DATABASE_URL scheme) so operators can confirm
@@ -61,6 +78,9 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         start = time.perf_counter()
         response = await call_next(request)
         elapsed = (time.perf_counter() - start) * 1000
+        if response.status_code >= 500:
+            with _5xx_lock:
+                _5xx_window.append(time.time())
         logger.info(
             "%s %s %d %.0fms",
             request.method, request.url.path, response.status_code, elapsed,
@@ -169,6 +189,7 @@ def health():
         "components": components,
         "db_scheme": db_scheme,
         "alembic_revision": alembic_revision,
+        "five_xx_recent": get_5xx_count(),
     }
 
 
