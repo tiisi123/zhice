@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from .dsl_schema import ConditionRule, EntryConditions, SelectConditions, StrategyDSL
+from .dsl_schema import ConditionRule, EntryConditions, EnvironmentConditions, SelectConditions, StrategyDSL
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +264,70 @@ def _evaluate_entry(bar: dict, dsl_entry: Optional[EntryConditions]) -> bool:
     return True
 
 
+SENTIMENT_TIERS = {1: "ICE", 2: "COOL", 3: "WARM", 4: "HOT", 5: "FRENZY"}
+SENTIMENT_LABELS_TO_LEVEL = {v: k for k, v in SENTIMENT_TIERS.items()}
+
+
+def _compute_sentiment_level(positive_ratio: float) -> int:
+    if positive_ratio < 0.2:
+        return 1
+    elif positive_ratio < 0.4:
+        return 2
+    elif positive_ratio < 0.6:
+        return 3
+    elif positive_ratio < 0.8:
+        return 4
+    else:
+        return 5
+
+
+def _evaluate_environment(
+    date: str,
+    dsl_env: Optional[EnvironmentConditions],
+    kline_map: dict[str, dict[str, dict]],
+) -> bool:
+    if dsl_env is None:
+        return True
+
+    bars_on_date = [
+        code_bars[date] for code_bars in kline_map.values() if date in code_bars
+    ]
+    if not bars_on_date:
+        return True
+
+    if dsl_env.market_change is not None:
+        avg_pct_chg = sum(b.get("pct_chg", 0) or 0 for b in bars_on_date) / len(bars_on_date)
+        if not _match_condition(avg_pct_chg, dsl_env.market_change):
+            return False
+
+    if dsl_env.sentiment is not None:
+        positive_count = sum(1 for b in bars_on_date if (b.get("pct_chg", 0) or 0) > 0)
+        positive_ratio = positive_count / len(bars_on_date)
+        level = _compute_sentiment_level(positive_ratio)
+        label = SENTIMENT_TIERS[level]
+
+        if dsl_env.sentiment.eq is not None:
+            target = str(dsl_env.sentiment.eq)
+            if target in SENTIMENT_LABELS_TO_LEVEL:
+                if level != SENTIMENT_LABELS_TO_LEVEL[target]:
+                    return False
+            else:
+                if str(level) != target:
+                    return False
+        if dsl_env.sentiment.gte is not None:
+            target_val = dsl_env.sentiment.gte
+            if target_val != int(target_val):
+                pass
+            if level < target_val:
+                return False
+        if dsl_env.sentiment.lte is not None:
+            target_val = dsl_env.sentiment.lte
+            if level > target_val:
+                return False
+
+    return True
+
+
 class BacktestEngine:
     def run(self, dsl: StrategyDSL, years: int = 3) -> BacktestResult:
         klines = _load_klines(years)
@@ -334,7 +398,8 @@ class BacktestEngine:
                 held_codes.discard(positions[pi]["code"])
                 positions.pop(pi)
 
-            if len(positions) < max_positions:
+            env_ok = _evaluate_environment(date, dsl.environment, kline_map)
+            if env_ok and len(positions) < max_positions:
                 for code in codes:
                     if code in held_codes:
                         continue
