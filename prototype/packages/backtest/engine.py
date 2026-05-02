@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from .dsl_schema import ConditionRule, SelectConditions, StrategyDSL
+from .dsl_schema import ConditionRule, EntryConditions, SelectConditions, StrategyDSL
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +241,29 @@ def _evaluate_select(
     return result
 
 
+def _evaluate_entry(bar: dict, dsl_entry: Optional[EntryConditions]) -> bool:
+    """Check if a bar satisfies DSL entry conditions. Returns True if all conditions pass."""
+    if dsl_entry is None:
+        return True
+
+    if dsl_entry.open_change is not None:
+        pre_close = bar.get("pre_close", 0)
+        open_price = bar.get("open", 0)
+        if pre_close > 0:
+            open_change_pct = (open_price - pre_close) / pre_close * 100
+        else:
+            open_change_pct = 0.0
+        if not _match_condition(open_change_pct, dsl_entry.open_change):
+            return False
+
+    if dsl_entry.volume is not None:
+        amount = bar.get("amount", 0) or 0
+        if not _match_condition(amount, dsl_entry.volume):
+            return False
+
+    return True
+
+
 class BacktestEngine:
     def run(self, dsl: StrategyDSL, years: int = 3) -> BacktestResult:
         klines = _load_klines(years)
@@ -256,13 +279,16 @@ class BacktestEngine:
         tp = dsl.exit.take_profit / 100
         sl = abs(dsl.exit.stop_loss) / 100
         max_hold = dsl.exit.max_hold_days
+        per_stock_pct = dsl.position.per_stock
+        max_total_pct = dsl.position.max_total
+        max_positions = max(1, int(max_total_pct / per_stock_pct)) if per_stock_pct > 0 else 1
 
         equity = 100.0
         peak = equity
         max_dd = 0.0
-        trades = []
-        curve = []
-        daily_returns = []
+        trades: list[dict] = []
+        curve: list[dict] = []
+        daily_returns: list[float] = []
         total_hold = 0
 
         all_dates = sorted({bar["date"] for bars in klines.values() for bar in bars})
@@ -273,28 +299,28 @@ class BacktestEngine:
         for code, bars in klines.items():
             kline_map[code] = {bar["date"]: bar for bar in bars}
 
-        position: dict | None = None
+        positions: list[dict] = []
+        held_codes: set[str] = set()
         prev_equity = equity
-        trade_interval = max(5, 20 // max(len(codes), 1))
-        code_idx = 0
 
         for i, date in enumerate(all_dates):
-            if position is not None:
-                code = position["code"]
+            exited: list[int] = []
+            for pi, pos in enumerate(positions):
+                code = pos["code"]
                 bar = kline_map.get(code, {}).get(date)
                 if bar:
                     current_price = bar["close"]
-                    entry_price = position["entry_price"]
+                    entry_price = pos["entry_price"]
                     pnl_pct = (current_price - entry_price) / entry_price
-                    hold_days = position["hold_days"] + 1
-                    position["hold_days"] = hold_days
+                    hold_days = pos["hold_days"] + 1
+                    pos["hold_days"] = hold_days
 
                     should_exit = pnl_pct >= tp or pnl_pct <= -sl or hold_days >= max_hold
                     if should_exit:
-                        pnl_value = equity * (dsl.position.per_stock / 100) * pnl_pct
+                        pnl_value = equity * (per_stock_pct / 100) * pnl_pct
                         equity += pnl_value
                         trades.append({
-                            "date": position["entry_date"],
+                            "date": pos["entry_date"],
                             "stock": STOCK_NAMES.get(code, code),
                             "direction": "买入",
                             "hold_days": hold_days,
@@ -302,19 +328,31 @@ class BacktestEngine:
                             "result": "盈利" if pnl_pct > 0 else "亏损",
                         })
                         total_hold += hold_days
-                        position = None
+                        exited.append(pi)
 
-            elif i % trade_interval == 0:
-                code = codes[code_idx % len(codes)]
-                code_idx += 1
-                bar = kline_map.get(code, {}).get(date)
-                if bar and bar["open"] > 0:
-                    position = {
-                        "code": code,
-                        "entry_price": bar["open"],
-                        "entry_date": date,
-                        "hold_days": 0,
-                    }
+            for pi in reversed(exited):
+                held_codes.discard(positions[pi]["code"])
+                positions.pop(pi)
+
+            if len(positions) < max_positions:
+                for code in codes:
+                    if code in held_codes:
+                        continue
+                    if len(positions) >= max_positions:
+                        break
+                    bar = kline_map.get(code, {}).get(date)
+                    if bar and bar.get("open", 0) > 0 and _evaluate_entry(bar, dsl.entry):
+                        positions.append({
+                            "code": code,
+                            "entry_price": bar["open"],
+                            "entry_date": date,
+                            "hold_days": 0,
+                        })
+                        held_codes.add(code)
+
+            entry_count = sum(1 for pos in positions if pos["entry_date"] == date)
+            if entry_count > 0:
+                logger.debug("date %s: %d new entries, %d total positions", date, entry_count, len(positions))
 
             if equity != prev_equity or i % 10 == 0:
                 curve.append({"date": date, "value": round(equity, 2)})
@@ -325,22 +363,22 @@ class BacktestEngine:
             max_dd = max(max_dd, dd)
             prev_equity = equity
 
-        if position is not None:
-            code = position["code"]
+        for pos in positions:
+            code = pos["code"]
             last_bars = klines.get(code, [])
             if last_bars:
-                pnl_pct = (last_bars[-1]["close"] - position["entry_price"]) / position["entry_price"]
-                pnl_value = equity * (dsl.position.per_stock / 100) * pnl_pct
+                pnl_pct = (last_bars[-1]["close"] - pos["entry_price"]) / pos["entry_price"]
+                pnl_value = equity * (per_stock_pct / 100) * pnl_pct
                 equity += pnl_value
                 trades.append({
-                    "date": position["entry_date"],
+                    "date": pos["entry_date"],
                     "stock": STOCK_NAMES.get(code, code),
                     "direction": "买入",
-                    "hold_days": position["hold_days"],
+                    "hold_days": pos["hold_days"],
                     "pnl": round(pnl_pct * 100, 2),
                     "result": "盈利" if pnl_pct > 0 else "亏损",
                 })
-                total_hold += position["hold_days"]
+                total_hold += pos["hold_days"]
 
         if not curve or curve[-1]["date"] != all_dates[-1]:
             curve.append({"date": all_dates[-1], "value": round(equity, 2)})
