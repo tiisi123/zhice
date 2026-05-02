@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import random
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import Optional
 
-from .dsl_schema import StrategyDSL
+from .dsl_schema import ConditionRule, SelectConditions, StrategyDSL
+
+logger = logging.getLogger(__name__)
 
 BACKTEST_STOCKS = [
     "600519.SH", "000858.SZ", "601012.SH", "300750.SZ", "002475.SZ",
@@ -64,7 +67,7 @@ class BacktestResult:
 
 
 def _load_klines(years: int) -> dict[str, list[dict]]:
-    """Load real klines from TuShare, fall back to empty on failure."""
+    """Load real klines from TuShare for ALL BACKTEST_STOCKS deterministically."""
     try:
         from packages.connectors.registry import get_tushare
         ts = get_tushare()
@@ -76,12 +79,166 @@ def _load_klines(years: int) -> dict[str, list[dict]]:
     end = datetime.now().strftime("%Y%m%d")
     start = (datetime.now() - timedelta(days=years * 365)).strftime("%Y%m%d")
     klines: dict[str, list[dict]] = {}
-    codes = random.sample(BACKTEST_STOCKS, min(8, len(BACKTEST_STOCKS)))
-    for code in codes:
+    for code in sorted(BACKTEST_STOCKS):
         rows = ts.get_daily(code, start_date=start, end_date=end)
         if rows:
             klines[code] = rows
     return klines
+
+
+def _compute_stock_features(code: str, bars: list[dict]) -> dict:
+    """Derive deterministic features from kline bars for select evaluation."""
+    if not bars:
+        return {"code": code, "board_count": 0, "turnover_rate": 0.0, "market_cap": 0.0}
+
+    sorted_bars = sorted(bars, key=lambda b: b["date"])
+    trailing = sorted_bars[-10:] if len(sorted_bars) >= 10 else sorted_bars
+
+    board_count = 0
+    for bar in reversed(trailing):
+        close = bar.get("close", 0)
+        pre_close = bar.get("pre_close", 0)
+        if pre_close > 0 and close >= pre_close * 1.095:
+            board_count += 1
+        else:
+            break
+
+    latest = sorted_bars[-1]
+    volume = latest.get("vol", latest.get("volume", 0)) or 0
+    amount = latest.get("amount", 0) or 0
+    close = latest.get("close", 0) or 0
+    turnover_rate = (volume / amount) if amount > 0 else 0.0
+    market_cap = close * volume
+
+    return {
+        "code": code,
+        "board_count": board_count,
+        "turnover_rate": turnover_rate,
+        "market_cap": market_cap,
+    }
+
+
+def _match_condition(value, rule: ConditionRule) -> bool:
+    """Check if a single value satisfies a ConditionRule. Returns True if all set operators pass."""
+    if rule.gte is not None:
+        try:
+            if float(value) < rule.gte:
+                return False
+        except (TypeError, ValueError):
+            return False
+    if rule.lte is not None:
+        try:
+            if float(value) > rule.lte:
+                return False
+        except (TypeError, ValueError):
+            return False
+    if rule.eq is not None:
+        if str(value) != str(rule.eq):
+            return False
+    return True
+
+
+def _evaluate_select(
+    dsl_select: Optional[SelectConditions],
+    klines: dict[str, list[dict]],
+    features: dict[str, dict],
+) -> list[str]:
+    """Filter stock codes by DSL select conditions. Returns sorted list of passing codes."""
+    codes = sorted(klines.keys())
+
+    if dsl_select is None:
+        return codes
+
+    rank_field: Optional[str] = None
+    rank_n: Optional[int] = None
+
+    passing: list[str] = []
+    for code in codes:
+        feat = features.get(code, {})
+        ok = True
+
+        if dsl_select.board_count is not None:
+            if dsl_select.board_count.rank:
+                rank_field = "board_count"
+                try:
+                    rank_n = int(dsl_select.board_count.rank.replace("top", ""))
+                except ValueError:
+                    rank_n = 3
+            elif not _match_condition(feat.get("board_count", 0), dsl_select.board_count):
+                ok = False
+
+        if dsl_select.turnover_rate is not None:
+            if dsl_select.turnover_rate.rank:
+                rank_field = "turnover_rate"
+                try:
+                    rank_n = int(dsl_select.turnover_rate.rank.replace("top", ""))
+                except ValueError:
+                    rank_n = 3
+            elif not _match_condition(feat.get("turnover_rate", 0), dsl_select.turnover_rate):
+                ok = False
+
+        if dsl_select.market_cap is not None:
+            if dsl_select.market_cap.rank:
+                rank_field = "market_cap"
+                try:
+                    rank_n = int(dsl_select.market_cap.rank.replace("top", ""))
+                except ValueError:
+                    rank_n = 3
+            elif not _match_condition(feat.get("market_cap", 0), dsl_select.market_cap):
+                ok = False
+
+        if dsl_select.theme_hot is not None:
+            if dsl_select.theme_hot.rank:
+                rank_field = "theme_hot"
+                try:
+                    rank_n = int(dsl_select.theme_hot.rank.replace("top", ""))
+                except ValueError:
+                    rank_n = 3
+            elif feat.get("theme_hot") is not None:
+                if not _match_condition(feat["theme_hot"], dsl_select.theme_hot):
+                    ok = False
+
+        if dsl_select.seal_amount is not None:
+            if dsl_select.seal_amount.rank:
+                rank_field = "seal_amount"
+                try:
+                    rank_n = int(dsl_select.seal_amount.rank.replace("top", ""))
+                except ValueError:
+                    rank_n = 3
+            elif feat.get("seal_amount") is not None:
+                if not _match_condition(feat["seal_amount"], dsl_select.seal_amount):
+                    ok = False
+
+        if dsl_select.is_leader is not None and dsl_select.is_leader is True:
+            pass
+
+        if dsl_select.limit_reason is not None:
+            lr = feat.get("limit_reason")
+            if lr is not None and lr != dsl_select.limit_reason:
+                ok = False
+
+        if dsl_select.sector is not None:
+            sec = feat.get("sector")
+            if sec is not None and sec != dsl_select.sector:
+                ok = False
+
+        if ok:
+            passing.append(code)
+
+    if rank_field is not None and rank_n is not None:
+        passing.sort(key=lambda c: features.get(c, {}).get(rank_field, 0), reverse=True)
+        passing = passing[:rank_n]
+
+    result = sorted(passing)
+
+    logger.info("select filter: %d/%d stocks passed", len(result), len(codes))
+
+    if not result:
+        raise BacktestDataUnavailable(
+            f"选股条件过滤后无标的通过（{len(codes)} 只股票全部被过滤），请放宽选股条件"
+        )
+
+    return result
 
 
 class BacktestEngine:
@@ -92,6 +249,10 @@ class BacktestEngine:
         raise BacktestDataUnavailable("真实历史行情不可用，请配置 TUSHARE_TOKEN 或稍后重试")
 
     def _run_real(self, dsl: StrategyDSL, klines: dict[str, list[dict]], years: int) -> BacktestResult:
+        features = {code: _compute_stock_features(code, bars) for code, bars in klines.items()}
+        codes = _evaluate_select(dsl.select, klines, features)
+        logger.info("entry signal candidates: %d stocks", len(codes))
+
         tp = dsl.exit.take_profit / 100
         sl = abs(dsl.exit.stop_loss) / 100
         max_hold = dsl.exit.max_hold_days
@@ -112,10 +273,10 @@ class BacktestEngine:
         for code, bars in klines.items():
             kline_map[code] = {bar["date"]: bar for bar in bars}
 
-        codes = list(klines.keys())
         position: dict | None = None
         prev_equity = equity
         trade_interval = max(5, 20 // max(len(codes), 1))
+        code_idx = 0
 
         for i, date in enumerate(all_dates):
             if position is not None:
@@ -144,7 +305,8 @@ class BacktestEngine:
                         position = None
 
             elif i % trade_interval == 0:
-                code = random.choice(codes)
+                code = codes[code_idx % len(codes)]
+                code_idx += 1
                 bar = kline_map.get(code, {}).get(date)
                 if bar and bar["open"] > 0:
                     position = {
