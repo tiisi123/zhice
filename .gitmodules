@@ -1,0 +1,7 @@
+[submodule "docs/gsd-input/raw/PySise6Code/daban_fastapi"]
+path = docs/gsd-input/raw/PySise6Code/daban_fastapi
+url = https://gitee.com/ts_tiisi/daban_fastapi.git
+
+[submodule "docs/gsd-input/raw/PySise6Code/daban_pc"]
+path = docs/gsd-input/raw/PySise6Code/daban_pc
+url = https://gitee.com/ts_tiisi/daban_pc.git
