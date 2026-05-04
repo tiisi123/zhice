@@ -18,8 +18,10 @@ export default function LoginPage() {
   const [showTermsModal, setShowTermsModal] = useState(false)
   const [pendingRegister, setPendingRegister] = useState<{ phone: string; password: string; nickname: string; invite_code: string } | null>(null)
   const autoLoginStarted = useRef(false)
+  const [autoLoginFailed, setAutoLoginFailed] = useState(false)
 
   const nextUrl = new URLSearchParams(location.search).get('next') || '/replay'
+  const showAutoSpin = AUTO_TEST_LOGIN && !autoLoginFailed
 
   const handleLogin = async (values: { phone: string; password: string }) => {
     setLoading(true)
@@ -29,6 +31,7 @@ export default function LoginPage() {
       message.success(`欢迎回来，${res.user.nickname}`)
       void navigate(nextUrl, { replace: true })
     } catch (e) {
+      setAutoLoginFailed(true)
       message.error((e as Error)?.message || '登录失败')
     } finally {
       setLoading(false)
@@ -74,13 +77,13 @@ export default function LoginPage() {
           <Title level={2} style={{ margin: 0 }}>智策</Title>
           <Paragraph type="secondary" style={{ marginTop: 4 }}>AI 投研与策略中枢</Paragraph>
         </div>
-        {AUTO_TEST_LOGIN && (
+        {showAutoSpin && (
           <div style={{ textAlign: 'center', padding: '24px 0 8px' }}>
             <Spin />
             <Paragraph type="secondary" style={{ marginTop: 12 }}>正在进入内测环境</Paragraph>
           </div>
         )}
-        {!AUTO_TEST_LOGIN && (
+        {!showAutoSpin && (
         <Tabs
           activeKey={tab}
           onChange={(k) => setTab(k as 'login' | 'register')}

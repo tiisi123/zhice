@@ -11,32 +11,6 @@ from .etf.client import EastmoneyEtfClient
 from .dfcf.client import DfcfClient
 
 
-def _read_kpl_cookie() -> str:
-    """Best-effort lookup for the c1 shared KPL cookie.
-
-    T03 will introduce `apps.api.cookie_provider.get_kpl_cookie()` backed by
-    Fernet-decrypted system_secrets row. Until then this falls back to the
-    KPL_COOKIE env var (read via settings if present) or empty string. An
-    empty cookie causes the underlying client _post to short-circuit with
-    sentinel `{"_error": "cookie_missing"}` instead of hitting upstream.
-    """
-    try:
-        from apps.api.services.cookie_provider import get_kpl_cookie
-    except Exception:
-        get_kpl_cookie = None
-    if get_kpl_cookie is not None:
-        try:
-            return get_kpl_cookie() or ""
-        except Exception:
-            return ""
-    try:
-        from apps.api.config import settings
-
-        return getattr(settings, "kpl_cookie", "") or ""
-    except Exception:
-        return ""
-
-
 @lru_cache(maxsize=1)
 def get_kpl() -> KplClient:
     from apps.api.config import settings
@@ -46,7 +20,6 @@ def get_kpl() -> KplClient:
         token=settings.kpl_token,
         device_id=settings.kpl_device_id,
         version=settings.kpl_version,
-        cookie=_read_kpl_cookie(),
     )
 
 
@@ -55,7 +28,6 @@ def get_kpl_realtime() -> KplRealtimeClient:
     from apps.api.config import settings
 
     return KplRealtimeClient(
-        cookie=_read_kpl_cookie(),
         user_id=settings.kpl_user_id,
         token=settings.kpl_token,
         device_id=settings.kpl_device_id,
@@ -68,7 +40,6 @@ def get_kpl_history() -> KplHistoryClient:
     from apps.api.config import settings
 
     return KplHistoryClient(
-        cookie=_read_kpl_cookie(),
         user_id=settings.kpl_user_id,
         token=settings.kpl_token,
         device_id=settings.kpl_device_id,
@@ -77,7 +48,7 @@ def get_kpl_history() -> KplHistoryClient:
 
 
 def clear_kpl_caches() -> None:
-    """Evict cached KPL client singletons so the next call picks up a fresh cookie."""
+    """Evict cached KPL client singletons so the next call picks up fresh settings."""
     get_kpl.cache_clear()
     get_kpl_realtime.cache_clear()
     get_kpl_history.cache_clear()

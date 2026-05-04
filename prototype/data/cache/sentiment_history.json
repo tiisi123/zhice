@@ -42,5 +42,27 @@
     "score": 0,
     "up": 0,
     "down": 0
+  },
+  {
+    "date": "2026-05-03",
+    "limit_up": 79,
+    "broken": 14,
+    "broken_rate": 15.05,
+    "max_board": 4,
+    "sentiment": "回暖",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-05-04",
+    "limit_up": 79,
+    "broken": 14,
+    "broken_rate": 15.05,
+    "max_board": 4,
+    "sentiment": "回暖",
+    "score": 0,
+    "up": 0,
+    "down": 0
   }
 ]

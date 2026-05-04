@@ -361,6 +361,8 @@ class Watchlist(Base):
     alert_change_down: Mapped[float | None] = mapped_column(Float, nullable=True)
     alert_limit_up: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     alert_broken: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    cost_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    shares: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped["DateTime"] = mapped_column(
         DateTime(timezone=False), server_default=func.current_timestamp(), nullable=False
     )

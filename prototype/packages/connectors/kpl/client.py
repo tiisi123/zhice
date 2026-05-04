@@ -111,11 +111,12 @@ def _extract_list(resp) -> list:
 
 
 class KplClient:
-    """c1 facade: shared cookie across realtime/history/merge hosts.
+    """c1 facade: shared DeviceID across realtime/history/merge hosts.
 
+    KPL authenticates via DeviceID in POST body, not HTTP cookies.
     Constructs internal KplRealtimeClient + KplHistoryClient with the same
-    cookie. Legacy 9-method signatures are preserved by delegating to the
-    appropriate split client based on whether trade_date is today.
+    credentials. Legacy 9-method signatures are preserved by delegating to
+    the appropriate split client based on whether trade_date is today.
     """
 
     def __init__(
@@ -158,18 +159,9 @@ class KplClient:
     def _headers(self, host_key: str = "merge") -> dict:
         h = _DEFAULT_HEADERS.copy()
         h["Host"] = HOST_MAP.get(host_key, HOST_MAP["merge"])
-        if self.cookie:
-            h["Cookie"] = self.cookie
         return h
 
     def _post(self, url: str, data: dict, host_key: str = "merge") -> dict:
-        if not self.cookie:
-            logger.info(
-                "KPL merge _post short-circuit: cookie_missing endpoint=%s a=%s",
-                url,
-                data.get("a", ""),
-            )
-            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
@@ -275,10 +267,43 @@ class KplClient:
             order_int = 0
         if self._is_today(trade_date):
             resp = self._realtime.get_concept_selected(index=index, order=order_int)
+            if _is_sentinel(resp):
+                day = trade_date or datetime.now().strftime("%Y-%m-%d")
+                resp = self._history.get_concept_selected_history(day, index=index)
         else:
             resp = self._history.get_concept_selected_history(trade_date, index=index)
+        if _is_sentinel(resp):
+            fallback = self._sectors_from_ranking(index=index, order=order_int)
+            if fallback:
+                self._record(None)
+                return fallback
         self._record(resp)
         return _extract_list(resp)
+
+    def _sectors_from_ranking(self, index: int = 0, order: int = 0) -> list[dict]:
+        """Fallback: convert RealRankingInfo array rows into ConceptSelected-like dicts."""
+        resp = self._realtime.get_sectors_realtime(index=index, order=order)
+        if _is_sentinel(resp):
+            return []
+        rows = resp.get("list") or []
+        result = []
+        for row in rows:
+            if not isinstance(row, list) or len(row) < 10:
+                continue
+            result.append({
+                "PlateID": str(row[0]) if row[0] else "",
+                "PlateName": str(row[1]) if row[1] else "",
+                "concept_name": str(row[1]) if row[1] else "",
+                "ChangePercent": float(row[3]) if row[3] is not None else 0.0,
+                "concept_increase": float(row[3]) if row[3] is not None else 0.0,
+                "Intensity": float(row[9]) if row[9] is not None else 0.0,
+                "concept_intensity": float(row[9]) if row[9] is not None else 0.0,
+                "Amount": float(row[5]) if row[5] is not None else 0.0,
+                "concept_amount": float(row[5]) if row[5] is not None else 0.0,
+                "MainForce": float(row[8]) if row[8] is not None else 0.0,
+                "concept_net_amount": float(row[8]) if row[8] is not None else 0.0,
+            })
+        return result
 
     def get_concept_detail(
         self,
@@ -288,6 +313,11 @@ class KplClient:
     ) -> list[dict]:
         if self._is_today(trade_date):
             resp = self._realtime.get_concept_detail(plate_id, index=index)
+            if _is_sentinel(resp):
+                day = trade_date or datetime.now().strftime("%Y-%m-%d")
+                resp = self._history.get_concept_detail_history(
+                    plate_id, day, index=index
+                )
         else:
             resp = self._history.get_concept_detail_history(
                 plate_id, trade_date, index=index
@@ -301,8 +331,9 @@ class KplClient:
         if self._is_today(trade_date):
             resp = self._realtime.get_concept_subsection(plate_id)
             self._record(resp)
+            if _is_sentinel(resp):
+                return []
             return _extract_list(resp)
-        # daban_pc historical SonPlate_Info not exposed; return [] safely
         return []
 
     def get_limit_performance(

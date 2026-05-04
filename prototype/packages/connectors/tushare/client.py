@@ -266,5 +266,89 @@ class TushareClient:
             "data_source": "tushare",
         }
 
+    def _latest_trade_date(self) -> str:
+        today = datetime.now()
+        d = today
+        for _ in range(7):
+            if d.weekday() < 5:
+                if d.date() == today.date() and today.hour < 16:
+                    d -= timedelta(days=1)
+                    continue
+                return d.strftime("%Y%m%d")
+            d -= timedelta(days=1)
+        return today.strftime("%Y%m%d")
+
+    @staticmethod
+    def _latest_quarter_end() -> str:
+        today = datetime.now()
+        y = today.year
+        m, d = today.month, today.day
+        if m > 4 or (m == 4 and d > 30):
+            period_end = f"{y}0331"
+        elif m > 8 or (m == 8 and d > 31):
+            period_end = f"{y}0630"
+        elif m > 10 or (m == 10 and d > 31):
+            period_end = f"{y}0930"
+        else:
+            period_end = f"{y - 1}1231"
+        return period_end
+
+    def get_daily_basic_all(self, trade_date: str = "") -> list[dict[str, Any]]:
+        if not self.token:
+            return []
+        if not trade_date:
+            trade_date = self._latest_trade_date()
+        fields = (
+            "ts_code,trade_date,close,pe,pe_ttm,pb,ps,ps_ttm,"
+            "dv_ratio,dv_ttm,total_mv,circ_mv"
+        )
+        rows = self._post(
+            api_name="daily_basic",
+            params={"trade_date": trade_date},
+            fields=fields,
+        )
+        if not rows and trade_date:
+            prev = (datetime.strptime(trade_date, "%Y%m%d") - timedelta(days=1)).strftime("%Y%m%d")
+            rows = self._post(
+                api_name="daily_basic",
+                params={"trade_date": prev},
+                fields=fields,
+            )
+        if rows:
+            logger.info("daily_basic_all: %d rows for trade_date=%s", len(rows), trade_date)
+        else:
+            logger.warning("daily_basic_all: 0 rows for trade_date=%s", trade_date)
+        return rows
+
+    def get_fina_indicator_all(self, period: str = "") -> list[dict[str, Any]]:
+        if not self.token:
+            return []
+        if not period:
+            period = self._latest_quarter_end()
+        fields = (
+            "ts_code,end_date,roe,roe_dt,roa,grossprofit_margin,"
+            "netprofit_margin,eps,dt_eps,debt_to_assets"
+        )
+        rows = self._post(
+            api_name="fina_indicator",
+            params={"period": period},
+            fields=fields,
+        )
+        if not rows and period != self._latest_quarter_end():
+            pass
+        elif not rows:
+            prev_period = f"{int(period[:4]) - 1}1231" if period.endswith("0331") else period
+            if prev_period != period:
+                rows = self._post(
+                    api_name="fina_indicator",
+                    params={"period": prev_period},
+                    fields=fields,
+                )
+        if rows:
+            logger.info("fina_indicator_all: %d rows for period=%s", len(rows), period)
+        else:
+            logger.warning("fina_indicator_all: 0 rows — fina_indicator requires ts_code param for batch; per-stock fallback needed")
+        return rows
+
     def close(self):
         self._client.close()

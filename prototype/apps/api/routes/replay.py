@@ -281,9 +281,22 @@ def sector_ranking(date: Optional[str] = Query(None)):
         unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
         if unavail is not None:
             return unavail
-        return {"count": len(data), "data": data}
+        return wrap_contract(
+            data,
+            source="kpl",
+            status="real" if data else "empty",
+            trade_date=trade_date,
+            count=len(data),
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"获取板块排行失败: {str(e)}")
+        return wrap_contract(
+            [],
+            source="kpl",
+            status="unavailable",
+            message=f"获取板块排行失败: {str(e)}",
+            trade_date=date or datetime.now().strftime("%Y-%m-%d"),
+            count=0,
+        )
 
 
 @router.get("/limit-performance")

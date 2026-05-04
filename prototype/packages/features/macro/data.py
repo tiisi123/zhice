@@ -61,36 +61,170 @@ def get_macro_indicators() -> list[dict]:
     return [dict(m, data_source="mock") for m in MACRO_INDICATORS]
 
 
+_MACRO_API_MAP: list[tuple[str, str, str, str, str]] = [
+    # (api_name, display_name, unit, value_field, date_field)
+    ("cn_pmi",   "PMI",  "",     "PMI010000", "MONTH"),
+    ("cn_cpi",   "CPI",  "%",    "nt_yoy",    "month"),
+    ("cn_ppi",   "PPI",  "%",    "ppi_yoy",   "month"),
+    ("cn_m",     "M2",   "%",    "m2_yoy",    "month"),
+    ("sf_month", "社融",  "万亿", "inc_month",  "month"),
+]
+
+
 def _fetch_real_macro(ts) -> list[dict]:
-    """从 TuShare 拉取 PMI / CPI / PPI 等。"""
+    """从 TuShare 拉取 PMI / CPI / PPI / M2 / 社融。"""
     indicators = []
-    for api, name, unit in [
-        ("cn_pmi", "PMI", ""),
-        ("cn_cpi", "CPI", "%"),
-        ("cn_ppi", "PPI", "%"),
-        ("cn_m2", "M2", "%"),
-    ]:
+    for api, name, unit, val_field, date_field in _MACRO_API_MAP:
         try:
             rows = ts._post(api_name=api, params={}, fields="")
-            if rows and len(rows) >= 2:
-                latest = rows[0]
-                prev = rows[1]
-                val = float(latest.get(next((k for k in latest if k != "month" and k != "date"), ""), 0))
-                prev_val = float(prev.get(next((k for k in prev if k != "month" and k != "date"), ""), 0))
-                direction = "up" if val > prev_val else "down" if val < prev_val else "flat"
-                indicators.append({
-                    "name": name, "value": val, "prev": prev_val,
-                    "unit": unit, "direction": direction,
-                    "date": latest.get("month", latest.get("date", "")),
-                    "data_source": "tushare",
-                })
+            if not rows or len(rows) < 2:
+                continue
+            latest, prev = rows[0], rows[1]
+            raw_val = latest.get(val_field)
+            raw_prev = prev.get(val_field)
+            if raw_val is None or raw_prev is None:
+                continue
+            val = float(raw_val)
+            prev_val = float(raw_prev)
+            if name == "社融":
+                val = round(val / 10000, 2)
+                prev_val = round(prev_val / 10000, 2)
+            direction = "up" if val > prev_val else "down" if val < prev_val else "flat"
+            raw_date = str(latest.get(date_field, ""))
+            indicators.append({
+                "name": name, "value": val, "prev": prev_val,
+                "unit": unit, "direction": direction,
+                "date": f"{raw_date[:4]}-{raw_date[4:6]}" if len(raw_date) >= 6 else raw_date,
+                "data_source": "tushare",
+            })
         except Exception:
             continue
+    _append_static_rates(indicators)
     return indicators if len(indicators) >= 2 else []
 
 
+def _append_static_rates(indicators: list[dict]) -> None:
+    """LPR 和汇率 TuShare 未开放，保留静态值但标记来源。"""
+    for item in MACRO_INDICATORS:
+        if item["name"] in ("LPR-1Y", "LPR-5Y", "美元兑人民币"):
+            indicators.append(dict(item, data_source="static"))
+
+
 def get_industry_prosperity() -> list[dict]:
-    return INDUSTRY_PROSPERITY
+    """优先从申万行业指数行情拉取景气度，失败时回退到静态数据。"""
+    try:
+        from packages.connectors.registry import get_tushare
+        ts = get_tushare()
+        if ts.configured:
+            real = _fetch_real_prosperity(ts)
+            if real:
+                return real
+    except Exception:
+        logger.debug("fetch real prosperity failed, using static data")
+    return [dict(i, data_source="mock") for i in INDUSTRY_PROSPERITY]
+
+
+_QUARTER_BOUNDARIES = [
+    ("Q1", "0101", "0331"),
+    ("Q2", "0401", "0630"),
+    ("Q3", "0701", "0930"),
+    ("Q4", "1001", "1231"),
+]
+
+
+def _quarter_return(rows: list[dict], year: int, q_start: str, q_end: str) -> float | None:
+    """Calculate quarter return from sw_daily rows."""
+    start_d = f"{year}{q_start}"
+    end_d = f"{year}{q_end}"
+    period = [r for r in rows if start_d <= str(r.get("trade_date", "")) <= end_d]
+    if len(period) < 2:
+        return None
+    period.sort(key=lambda r: str(r.get("trade_date", "")))
+    open_price = float(period[0].get("close", 0))
+    close_price = float(period[-1].get("close", 0))
+    if open_price <= 0:
+        return None
+    return round((close_price - open_price) / open_price * 100, 1)
+
+
+def _score_from_return(pct: float | None) -> int:
+    """Map quarterly return to 0-100 prosperity score."""
+    if pct is None:
+        return 50
+    if pct > 15:
+        return 90
+    if pct > 8:
+        return 80
+    if pct > 3:
+        return 70
+    if pct > 0:
+        return 60
+    if pct > -5:
+        return 45
+    if pct > -10:
+        return 35
+    return 25
+
+
+def _fetch_real_prosperity(ts) -> list[dict]:
+    """从 TuShare 申万一级行业指数拉取景气度矩阵。"""
+    from datetime import datetime
+
+    industries = ts._post(api_name="index_classify", params={"level": "L1", "src": "SW2021"}, fields="")
+    if not industries:
+        return []
+
+    now = datetime.now()
+    year = now.year
+    start_date = f"{year - 1}0701"
+    end_date = now.strftime("%Y%m%d")
+
+    result = []
+    for ind in industries:
+        code = ind.get("index_code", "")
+        name = ind.get("industry_name", "")
+        if not code or not name:
+            continue
+
+        rows = ts._post(api_name="sw_daily", params={"ts_code": code, "start_date": start_date, "end_date": end_date}, fields="")
+        if not rows:
+            continue
+
+        scores = {}
+        for q_label, q_start, q_end in _QUARTER_BOUNDARIES:
+            for y in (year - 1, year):
+                ret = _quarter_return(rows, y, q_start, q_end)
+                if ret is not None:
+                    scores[q_label] = _score_from_return(ret)
+
+        if len(scores) < 2:
+            continue
+
+        latest = rows[0]
+        vals = list(scores.values())
+        if len(vals) >= 2:
+            trend = "up" if vals[-1] > vals[0] + 5 else "down" if vals[-1] < vals[0] - 5 else "flat"
+        else:
+            trend = "flat"
+        avg = sum(vals) / len(vals)
+        level = "high" if avg >= 70 else "low" if avg < 40 else "medium"
+
+        result.append({
+            "industry": name,
+            "q1": scores.get("Q1", 50),
+            "q2": scores.get("Q2", 50),
+            "q3": scores.get("Q3", 50),
+            "q4": scores.get("Q4", 50),
+            "trend": trend,
+            "level": level,
+            "pe": round(float(latest.get("pe") or 0), 1),
+            "pb": round(float(latest.get("pb") or 0), 2),
+            "pct_change": round(float(latest.get("pct_change") or 0), 2),
+            "data_source": "tushare",
+        })
+
+    result.sort(key=lambda x: x.get("q4", 0) if x.get("q4", 0) != 50 else x.get("q3", 0), reverse=True)
+    return result
 
 
 def get_portfolio() -> list[dict]:
@@ -105,7 +239,8 @@ def get_portfolio() -> list[dict]:
 
 
 def compare_industries(names: list[str]) -> list[dict]:
-    return [i for i in INDUSTRY_PROSPERITY if i["industry"] in names]
+    all_data = get_industry_prosperity()
+    return [i for i in all_data if i["industry"] in names]
 
 
 # --- 轮动推演 ---
@@ -160,25 +295,6 @@ ALTERNATIVE_DATA: dict[str, list[dict]] = {
     ],
 }
 
-EXPECTATION_HISTORY: dict[str, list[dict]] = {
-    "600519": [
-        {"date": "2026-01", "broker": "中信证券", "target": 2000, "eps_e": 60.0, "rating": "买入"},
-        {"date": "2026-02", "broker": "华泰证券", "target": 1950, "eps_e": 62.5, "rating": "买入"},
-        {"date": "2026-02", "broker": "中信证券", "target": 2050, "eps_e": 63.0, "rating": "买入"},
-        {"date": "2026-03", "broker": "国泰君安", "target": 1900, "eps_e": 60.0, "rating": "增持"},
-        {"date": "2026-04", "broker": "中信证券", "target": 2100, "eps_e": 65.0, "rating": "买入"},
-        {"date": "2026-04", "broker": "华泰证券", "target": 1980, "eps_e": 62.5, "rating": "买入"},
-        {"date": "2026-04", "broker": "海通证券", "target": 2050, "eps_e": 63.5, "rating": "优于大市"},
-    ],
-    "300750": [
-        {"date": "2026-01", "broker": "中信证券", "target": 250, "eps_e": 10.0, "rating": "买入"},
-        {"date": "2026-02", "broker": "招商证券", "target": 240, "eps_e": 10.5, "rating": "强烈推荐"},
-        {"date": "2026-03", "broker": "中金公司", "target": 230, "eps_e": 10.0, "rating": "推荐"},
-        {"date": "2026-04", "broker": "中信证券", "target": 280, "eps_e": 11.0, "rating": "买入"},
-        {"date": "2026-04", "broker": "招商证券", "target": 260, "eps_e": 10.5, "rating": "买入"},
-        {"date": "2026-04", "broker": "国盛证券", "target": 275, "eps_e": 10.8, "rating": "买入"},
-    ],
-}
 
 
 def get_meso_data(industry: str | None = None) -> list[dict]:
@@ -192,4 +308,26 @@ def get_alternative_data(code: str) -> list[dict]:
 
 
 def get_expectation_history(code: str) -> list[dict]:
-    return EXPECTATION_HISTORY.get(code, [])
+    """DFCF research reports bucketed by publish_date month. No mock fallback (D009)."""
+    try:
+        from packages.connectors.registry import get_dfcf
+        dfcf = get_dfcf()
+        reports = dfcf.get_research_reports(code, n=50)
+        if not reports:
+            return []
+        result = []
+        for r in reports:
+            pub_date = r.get("publish_date", "")
+            date_bucket = pub_date[:7] if len(pub_date) >= 7 else pub_date
+            result.append({
+                "date": date_bucket,
+                "broker": r.get("org", ""),
+                "target": r.get("target_price", 0),
+                "rating": r.get("rating", ""),
+                "title": r.get("title", ""),
+            })
+        result.sort(key=lambda x: x["date"])
+        return result
+    except Exception as e:
+        logger.warning("DFCF expectation_history fetch failed for %s: %s", code, e)
+        return []

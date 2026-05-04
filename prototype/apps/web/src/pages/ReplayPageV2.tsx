@@ -1465,8 +1465,8 @@ export default function ReplayPageV2() {
     const q = `?date=${date}`
     Promise.all([
       fetchApi<MarketSummary>(`/market/summary${q}`),
-      fetchApi<LadderData>(`/market/ladder${q}`),
-      fetchApi<{ data: SectorRaw[] }>(`/market/sectors${q}`),
+      fetchApi<LadderData>(`/market/ladder${q}`).catch(() => null),
+      fetchApi<{ data: SectorRaw[] }>(`/market/sectors${q}`).catch(() => ({ data: [] })),
       fetchApi<RelayResp>(`/market/ladder-relay${q}`).catch(() => null),
       fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow${q}`).catch(() => ({ data: [] })),
       fetchApi<AnyData>('/market/sentiment-phase').catch(() => null),
@@ -1474,7 +1474,9 @@ export default function ReplayPageV2() {
       fetchApi<AnyData>(`/market/next-day-strategy${q}`).catch(() => null),
     ])
       .then(([s, l, sec, r, cf, ph, br, st]) => {
-        setSummary(s); setLadder(l); setSectors(sec.data || []); setRelay(r)
+        const validSummary = s && (s as AnyData).data_status !== 'unavailable' && (s as AnyData).limit_up_count != null ? s : null
+        const validLadder = l && (l as AnyData).data_status !== 'unavailable' && (l as AnyData).tiers ? l : null
+        setSummary(validSummary); setLadder(validLadder); setSectors(sec?.data || []); setRelay(r)
         setCapitalFlow(cf?.data || [])
         setPhase(ph); setBrokenData(br); setStrategy(st)
         setApiMeta(extractMetaList([

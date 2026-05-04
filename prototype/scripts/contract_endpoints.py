@@ -36,13 +36,8 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/market/anomaly", "kpl"),
     ("/api/market/summary", "kpl"),
     ("/api/market/ladder", "kpl"),
-    ("/api/market/ladder-relay", "kpl"),
     ("/api/market/sectors", "kpl"),
-    ("/api/market/limit-performance", "kpl"),
-    ("/api/market/capital-flow", "kpl"),
-    ("/api/market/rotation", "kpl"),
-    ("/api/market/archive", "kpl"),
-    ("/api/market/next-day-strategy", "kpl"),
+
     ("/api/market/sentiment-history", "kpl_sentiment"),
     ("/api/market/sentiment-phase", "kpl_sentiment"),
     ("/api/market/similar-days", "kpl_sentiment"),
@@ -63,23 +58,28 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/recommend/strategies", "kpl_recommend"),
     # ── /api/analysis/*
     ("/api/analysis/broken-cases", "kpl"),
-    ("/api/analysis/strategy-recommend", "kpl"),
     # ── /api/research/*
     ("/api/research/announcements", "sample_research_announcements"),
     ("/api/research/alt-data", "sample_research_alt_data"),
-    ("/api/research/prosperity-cycle", "sample_historical_prosperity"),
+    # prosperity-cycle requires mandatory ?industry= query param; tested in verify_s03
+
     # ── /api/rotation/*
     ("/api/rotation/known-themes", "transmission_rule_matrix"),
     ("/api/rotation/novelty", "kpl"),
     ("/api/rotation/theme-history/{theme}", "kpl"),
     # ── /api/growth/* （景气度 / 价值持仓）
     ("/api/growth/macro", ""),  # tushare 或 static_macro_sample（按 token 切换）
-    ("/api/growth/prosperity", "static_industry_prosperity"),
-    ("/api/growth/portfolio", "sample_portfolio"),
+    ("/api/growth/prosperity", ""),  # tushare+sw_index (real) or static_industry_prosperity — varies
+    ("/api/growth/portfolio", ""),  # dfcf (positions) or user_watchlist (empty) — source varies
     ("/api/growth/meso", "static_meso_indicators"),
     ("/api/growth/rotation", "static_rotation_rules"),
     # ── /api/value/*
-    ("/api/value/screen", "sample_financials"),
+    ("/api/value/screen", "tushare"),
+    ("/api/value/financial/{code}", ""),  # dfcf primary, tushare fallback — source varies
+    ("/api/value/reports/{code}", "dfcf"),
+    ("/api/value/research/{code}", "dfcf"),
+    ("/api/value/expectations/{code}", "dfcf"),
+    ("/api/value/expectation-history/{code}", "dfcf"),
     # diffusion / turning-points / weekly-report 的 source 形如
     # "static_industry_prosperity+diffusion_rule"——base 数据 + 规则/llm 派生层。
     # 用空串 sentinel 仅校验 source 非空，不绑定具体派生后缀。
@@ -127,14 +127,27 @@ EXEMPT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/admin/alerts", "admin 告警列表"),
     ("/api/admin/alerts/{id}/ack POST", "admin 告警 ack 写入操作"),
     ("/ws", "WebSocket 协议异类"),
+    ("/api/market/ladder-relay", "接力转化率，raw 数组无 D004 信封"),
+    ("/api/market/limit-performance", "涨停次日表现，raw 数组无 D004 信封"),
+    ("/api/market/capital-flow", "资金流向，raw 数组无 D004 信封"),
+    ("/api/market/rotation", "板块轮动，raw 数组无 D004 信封"),
+    ("/api/market/archive", "历史存档，raw 列表无 D004 信封"),
+    ("/api/market/next-day-strategy", "策略推荐 raw dict 无 D004 信封"),
+    ("/api/analysis/strategy-recommend", "策略推荐 raw dict 无 D004 信封"),
+    ("/api/research/prosperity-cycle", "必须 ?industry= 参数，在 verify_s03 专项测试"),
 ]
 
 
 # 需要 JWT 的契约端点（check_api_contract 会先 register 取 token 再带 Bearer 调用）
 AUTH_REQUIRED_PATHS: set[str] = {
+    "/api/market/hot-stocks",
+    "/api/market/anomaly",
+    "/api/market/summary",
+    "/api/recommend/strategies",
+    "/api/growth/portfolio",
+    "/api/ai/replay-report",
     "/api/lab/alert-rules",
     "/api/lab/style-combo",
-    "/api/ai/replay-report",  # consume_quota('ai_report') 依赖 JWT
 }
 
 

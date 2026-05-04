@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any, Optional
-
 from fastapi import APIRouter, Query, HTTPException
 
 from apps.api.utils.contract import wrap_contract
@@ -36,118 +34,25 @@ def _financial_meta_d004(fin: dict) -> tuple[str, bool, str]:
     )
 
 
-def _to_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value in (None, "", "-"):
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def _fetch_tushare_financial(code: str) -> Optional[dict]:
-    try:
-        from packages.connectors.registry import get_tushare
-
-        ts = get_tushare()
-        if not ts.configured:
-            return None
-
-        basic = ts.get_stock_basic(code)
-        daily = ts.get_daily_basic_latest(code)
-        indicator = ts.get_fina_indicator_latest(code)
-        income = ts.get_income_latest(code)
-        if not daily and not indicator and not income:
-            return None
-
-        revenue = _to_float(income.get("total_revenue") or income.get("revenue"))
-        net_profit = _to_float(income.get("n_income_attr_p") or income.get("n_income"))
-        market_cap = _to_float(daily.get("total_mv")) * 10000
-        fcf = _to_float(indicator.get("fcff") or indicator.get("fcfe"))
-        if fcf <= 0 and net_profit:
-            fcf = net_profit * 0.8
-
-        return {
-            "code": code,
-            "name": basic.get("name") or daily.get("ts_code") or code,
-            "industry": basic.get("industry", ""),
-            "revenue": revenue,
-            "revenue_yoy": _to_float(indicator.get("or_yoy")),
-            "net_profit": net_profit,
-            "net_profit_yoy": _to_float(indicator.get("netprofit_yoy")),
-            "gross_margin": _to_float(indicator.get("grossprofit_margin")),
-            "net_margin": _to_float(indicator.get("netprofit_margin")),
-            "roe": _to_float(indicator.get("roe_dt") or indicator.get("roe")),
-            "roa": _to_float(indicator.get("roa")),
-            "pe": _to_float(daily.get("pe_ttm") or daily.get("pe")),
-            "pb": _to_float(daily.get("pb")),
-            "ps": _to_float(daily.get("ps_ttm") or daily.get("ps")),
-            "pe_percentile": 50,
-            "pb_percentile": 50,
-            "div_yield": _to_float(daily.get("dv_ttm") or daily.get("dv_ratio")),
-            "debt_ratio": _to_float(indicator.get("debt_to_assets")),
-            "fcf": fcf,
-            "eps": _to_float(indicator.get("dt_eps") or indicator.get("eps")),
-            "market_cap": market_cap,
-            "latest_trade_date": daily.get("trade_date", ""),
-            "latest_report_date": indicator.get("end_date") or income.get("end_date") or "",
-            "highlights": [],
-            "risks": [],
-            "data_source": "tushare",
-        }
-    except Exception:
-        return None
-
-
-def _get_best_financial_with_status(code: str) -> tuple[Optional[dict], bool]:
-    """Returns (financial_data, tushare_attempted_failed).
-
-    tushare_attempted_failed=True iff TUSHARE was configured (token set) but the call
-    yielded no usable data (network error, bad token, or empty response). Lets the
-    caller surface D004 'fallback' instead of silently returning 'mock'.
-    """
-    fin = get_financial(code)
-    if not fin or fin.get("data_source") == "mock":
-        try:
-            from packages.connectors.registry import get_tushare
-
-            ts = get_tushare()
-            if ts.configured:
-                ts_fin = _fetch_tushare_financial(code)
-                if ts_fin:
-                    return ts_fin, False
-                return fin, True
-        except Exception:
-            return fin, True
-    return fin, False
-
-
-def _get_best_financial(code: str) -> Optional[dict]:
-    fin, _ = _get_best_financial_with_status(code)
-    return fin
-
-
 @router.get("/financial/{code}")
 def financial_detail(code: str):
     try:
-        fin, tushare_failed = _get_best_financial_with_status(code)
+        fin = get_financial(code)
         if not fin:
-            raise HTTPException(status_code=404, detail=f"暂无 {code} 的财务数据")
-        src, sample_mode, msg = _financial_meta_d004(fin)
-        if tushare_failed and sample_mode:
             return wrap_contract(
-                fin,
-                source=src,
-                status="fallback",
+                {},
+                source="dfcf",
+                status="unavailable",
                 mock=False,
-                message="TUSHARE 数据源不可用（token 失效或网络问题），已降级为样例财务数据",
+                message=f"DFCF 和 TuShare 均无法获取 {code} 的财务数据",
             )
+        src = fin.get("data_source") or "unknown"
         return wrap_contract(
             fin,
             source=src,
-            status="mock" if sample_mode else "real",
-            mock=sample_mode,
-            message=msg,
+            status="real",
+            mock=False,
+            message="",
         )
     except HTTPException:
         raise
@@ -159,25 +64,12 @@ def financial_detail(code: str):
 def analyst_expectations(code: str):
     try:
         exps = get_expectations(code)
-        sample_mode = bool(exps) and not any(item.get("data_source") == "dfcf" for item in exps)
-        if sample_mode:
-            status = "mock"
-            src = "sample_analyst_expectations"
-            msg = "东方财富研报不可用，当前为静态卖方预期样例"
-        elif exps:
-            status = "real"
-            src = "dfcf"
-            msg = ""
-        else:
-            status = "empty"
-            src = "dfcf"
-            msg = ""
         return wrap_contract(
             exps,
-            source=src,
-            status=status,
-            mock=sample_mode,
-            message=msg,
+            source="dfcf",
+            status="real" if exps else "unavailable",
+            mock=False,
+            message="" if exps else f"DFCF 无法获取 {code} 的卖方预期",
             code=code,
             expectations=exps,
             count=len(exps),
@@ -194,7 +86,7 @@ def dcf_valuation(
     terminal: float = Query(0.03),
 ):
     try:
-        fin = _get_best_financial(code)
+        fin = get_financial(code)
         if not fin:
             raise HTTPException(status_code=404, detail="个股不存在")
         result = calc_dcf(fin["fcf"], growth, discount, terminal_growth=terminal)
@@ -236,17 +128,49 @@ def value_screen(
     max_pe: float = Query(30),
     min_roe: float = Query(15),
     min_div: float = Query(1.0),
+    max_pb: float = Query(0),
+    min_market_cap: float = Query(0),
 ):
     try:
-        stocks = screen_value_stocks(max_pe=max_pe, min_roe=min_roe, min_div=min_div)
+        from packages.connectors.registry import get_tushare
+        ts = get_tushare()
+        tushare_configured = ts.configured
+    except Exception:
+        tushare_configured = False
+
+    try:
+        stocks = screen_value_stocks(
+            max_pe=max_pe, min_roe=min_roe, min_div=min_div,
+            max_pb=max_pb, min_market_cap=min_market_cap,
+        )
+        if not tushare_configured:
+            return wrap_contract(
+                [],
+                source="tushare",
+                status="unavailable",
+                mock=False,
+                message="TuShare 未配置（缺少 TUSHARE_TOKEN），价值筛选不可用",
+                count=0,
+                stocks=[],
+            )
+        if stocks:
+            return wrap_contract(
+                stocks,
+                source="tushare",
+                status="real",
+                mock=False,
+                message="",
+                count=len(stocks),
+                stocks=stocks,
+            )
         return wrap_contract(
-            stocks,
-            source="sample_financials",
-            status="mock" if stocks else "empty",
-            mock=bool(stocks),
-            message="价值筛选当前仅覆盖样例财务池",
-            count=len(stocks),
-            stocks=stocks,
+            [],
+            source="tushare",
+            status="empty",
+            mock=False,
+            message="TuShare 全A筛选无匹配结果（条件过严或数据缺失）",
+            count=0,
+            stocks=[],
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"筛选失败: {str(e)}")
@@ -275,10 +199,10 @@ def financial_reports(code: str):
         reports = get_financial_reports(code)
         return wrap_contract(
             reports,
-            source="sample_financial_reports",
-            status="mock" if reports else "empty",
-            mock=bool(reports),
-            message="财报事件为静态样例",
+            source="dfcf",
+            status="real" if reports else "unavailable",
+            mock=False,
+            message="" if reports else f"DFCF 无法获取 {code} 的财报公告",
             code=code,
             reports=reports,
             count=len(reports),
@@ -293,10 +217,10 @@ def research_reports(code: str):
         reports = get_research_reports(code)
         return wrap_contract(
             reports,
-            source="sample_research_reports",
-            status="mock" if reports else "empty",
-            mock=bool(reports),
-            message="研报列表为静态样例",
+            source="dfcf",
+            status="real" if reports else "unavailable",
+            mock=False,
+            message="" if reports else f"DFCF 无法获取 {code} 的研报数据",
             code=code,
             reports=reports,
             count=len(reports),
@@ -328,10 +252,10 @@ def expectation_history(code: str):
         data = get_expectation_history(code)
         return wrap_contract(
             data,
-            source="sample_expectation_history",
-            status="mock" if data else "empty",
-            mock=bool(data),
-            message="卖方预期历史为静态样例",
+            source="dfcf",
+            status="real" if data else "unavailable",
+            mock=False,
+            message="" if data else f"DFCF 无法获取 {code} 的预期历史",
             code=code,
             history=data,
             count=len(data),
@@ -343,7 +267,7 @@ def expectation_history(code: str):
 @router.get("/ai-analysis/{code}")
 def ai_financial_analysis(code: str):
     try:
-        fin = _get_best_financial(code)
+        fin = get_financial(code)
         if not fin:
             raise HTTPException(status_code=404, detail=f"暂无 {code} 的财务数据")
         exps = get_expectations(code)
@@ -381,17 +305,17 @@ def diffusion_index():
     try:
         industries = get_industry_prosperity()
         result = calc_diffusion_index(industries)
-        sample_mode = True  # 静态行业景气矩阵 → 样例数据
+        is_real = bool(industries) and industries[0].get("data_source") == "tushare"
         extras = {
             k: v for k, v in result.items()
             if k not in ("source", "data_status", "mock", "message", "updated_at")
         }
         return wrap_contract(
             result,
-            source="static_industry_prosperity+diffusion_rule",
-            status="mock",
-            mock=sample_mode,
-            message="扩散指数基于静态行业景气矩阵推演",
+            source="tushare+diffusion_rule" if is_real else "static_industry_prosperity+diffusion_rule",
+            status="real" if is_real else "mock",
+            mock=not is_real,
+            message="扩散指数基于申万行业指数实时数据" if is_real else "扩散指数基于静态行业景气矩阵推演",
             **extras,
         )
     except Exception as e:
@@ -403,12 +327,19 @@ def turning_points(threshold: int = Query(10)):
     try:
         industries = get_industry_prosperity()
         alerts = detect_turning_points(industries, threshold)
+        is_real = bool(industries) and industries[0].get("data_source") == "tushare"
+        if not alerts:
+            tp_status = "empty"
+        elif is_real:
+            tp_status = "real"
+        else:
+            tp_status = "mock"
         return wrap_contract(
             alerts,
-            source="static_industry_prosperity+turning_rule",
-            status="mock" if alerts else "empty",
-            mock=bool(alerts),
-            message="拐点预警基于静态行业景气矩阵推演",
+            source="tushare+turning_rule" if is_real else "static_industry_prosperity+turning_rule",
+            status=tp_status,
+            mock=(tp_status == "mock"),
+            message="拐点预警基于申万行业指数实时数据" if is_real else "拐点预警基于静态行业景气矩阵推演",
             alerts=alerts,
             count=len(alerts),
         )
@@ -461,6 +392,7 @@ def generate_weekly_report():
         industries = get_industry_prosperity()
         diffusion = calc_diffusion_index(industries)
         turning = detect_turning_points(industries)
+        is_real = bool(industries) and industries[0].get("data_source") == "tushare"
 
         context = f"""景气扩散指数: {diffusion['diffusion_index']} ({diffusion['interpretation']})
 上行行业: {diffusion['up_count']}个, 下行: {diffusion['down_count']}个
@@ -475,13 +407,12 @@ def generate_weekly_report():
 
         from apps.ai.agents.llm_client import llm
         report = llm.chat(f"根据以下行业景气度数据生成本周景气度周报摘要:\n{context}\n要求200字以内，结构化输出。")
-        sample_mode = True  # static_industry_prosperity → 样例数据
         return wrap_contract(
             report,
-            source="static_industry_prosperity+llm",
-            status="mock",
-            mock=sample_mode,
-            message="周报基于静态景气矩阵和 AI 文本推演",
+            source="tushare+llm" if is_real else "static_industry_prosperity+llm",
+            status="real" if is_real else "mock",
+            mock=not is_real,
+            message="周报基于申万行业指数实时数据和 AI 推演" if is_real else "周报基于静态景气矩阵和 AI 文本推演",
             diffusion=diffusion,
             turning_points=turning,
             report=report,

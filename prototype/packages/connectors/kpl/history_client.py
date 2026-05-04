@@ -21,7 +21,7 @@ _DEFAULT_HEADERS = {
 class KplHistoryClient:
     """KPL history endpoint (apphis) client.
 
-    Cookie injection: cookie='' triggers _post sentinel return without HTTP call.
+    KPL authenticates via DeviceID in POST body, not HTTP cookies.
     """
 
     def __init__(
@@ -42,21 +42,19 @@ class KplHistoryClient:
     def _headers(self, host_key: str = "history") -> dict:
         h = _DEFAULT_HEADERS.copy()
         h["Host"] = HOST_MAP.get(host_key, HOST_MAP["history"])
-        if self.cookie:
-            h["Cookie"] = self.cookie
         return h
 
     def _post(self, url: str, data: dict, host_key: str = "history") -> dict:
-        if not self.cookie:
-            logger.info(
-                "KPL history _post short-circuit: cookie_missing endpoint=%s a=%s",
-                url,
-                data.get("a", ""),
-            )
-            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
+            if not resp.text.strip():
+                logger.warning(
+                    "KPL history empty body: endpoint=%s a=%s",
+                    url,
+                    data.get("a", ""),
+                )
+                return {"_error": "kpl_upstream_error", "http_code": 200}
             try:
                 return resp.json()
             except Exception:
@@ -65,7 +63,7 @@ class KplHistoryClient:
                     url,
                     data.get("a", ""),
                 )
-                return {}
+                return {"_error": "kpl_upstream_error", "http_code": 200}
         except httpx.HTTPStatusError as e:
             http_code = e.response.status_code if e.response is not None else 0
             logger.warning(

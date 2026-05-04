@@ -46,9 +46,8 @@ def _recent_5min(now: Optional[datetime.datetime] = None) -> str:
 class KplRealtimeClient:
     """KPL realtime endpoint (apphwhq) client.
 
-    Cookie injection: cookie='' triggers _post sentinel return without HTTP call,
-    allowing T07 routes to surface a cookie_missing unavailable state without
-    counting as upstream failure (does not increment consecutive_fail).
+    KPL authenticates via DeviceID in POST body, not HTTP cookies.
+    The cookie parameter is kept for backwards compatibility but is optional.
     """
 
     def __init__(
@@ -69,21 +68,19 @@ class KplRealtimeClient:
     def _headers(self, host_key: str = "realtime") -> dict:
         h = _DEFAULT_HEADERS.copy()
         h["Host"] = HOST_MAP.get(host_key, HOST_MAP["realtime"])
-        if self.cookie:
-            h["Cookie"] = self.cookie
         return h
 
     def _post(self, url: str, data: dict, host_key: str = "realtime") -> dict:
-        if not self.cookie:
-            logger.info(
-                "KPL realtime _post short-circuit: cookie_missing endpoint=%s a=%s",
-                url,
-                data.get("a", ""),
-            )
-            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
+            if not resp.text.strip():
+                logger.warning(
+                    "KPL realtime empty body: endpoint=%s a=%s",
+                    url,
+                    data.get("a", ""),
+                )
+                return {"_error": "kpl_upstream_error", "http_code": 200}
             try:
                 return resp.json()
             except Exception:
@@ -92,7 +89,7 @@ class KplRealtimeClient:
                     url,
                     data.get("a", ""),
                 )
-                return {}
+                return {"_error": "kpl_upstream_error", "http_code": 200}
         except httpx.HTTPStatusError as e:
             http_code = e.response.status_code if e.response is not None else 0
             logger.warning(

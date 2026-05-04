@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -34,6 +36,11 @@ from contract_endpoints import (  # noqa: E402  (sys.path 修改后导入)
 
 
 API_BASE = os.environ.get("ZHICE_API_BASE", "http://127.0.0.1:8000").rstrip("/")
+DB_PATH = os.environ.get(
+    "ZHICE_DB_PATH",
+    str(Path(__file__).resolve().parents[1] / "data" / "zhice.db"),
+)
+_TEST_INVITE = "CC0CHK"
 
 # D004 数据契约 6 值 enum（与 packages/shared/types.py / apps/web/src/api/types.ts 一一对应）
 ALLOWED_STATUS = {"real", "mock", "fallback", "unavailable", "empty", "error"}
@@ -79,10 +86,21 @@ def source_matches(actual: str, expected: str) -> bool:
 
 
 def register_token() -> str | None:
-    """注册一个临时账户拿 JWT，给 AUTH_REQUIRED_PATHS 用。失败返回 None。"""
+    """Inject invite code into DB, register a temp user, upgrade to VIP pro, return JWT."""
     phone = f"contract_check_{int(time.time())}"
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.execute(
+            "INSERT OR IGNORE INTO invite_codes (code, max_uses, used_count) VALUES (?, 10, 0)",
+            (_TEST_INVITE,),
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        return None
     body = json.dumps(
-        {"phone": phone, "password": "secret123", "nickname": "ContractCheck"},
+        {"phone": phone, "password": "secret123", "nickname": "ContractCheck",
+         "invite_code": _TEST_INVITE},
         ensure_ascii=False,
     ).encode("utf-8")
     req = Request(
@@ -94,14 +112,22 @@ def register_token() -> str | None:
     try:
         with urlopen(req, timeout=10) as res:
             payload = json.loads(res.read().decode("utf-8", errors="replace"))
-            return payload.get("token") or None
+            token = payload.get("token") or None
     except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
         return None
+    if token:
+        try:
+            conn = sqlite3.connect(DB_PATH, timeout=5)
+            conn.execute("UPDATE users SET vip_level='pro' WHERE phone=?", (phone,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
+    return token
 
 
 def check_endpoint(path: str, expected_source: str, token: str | None) -> Result:
-    use_token = token if path in AUTH_REQUIRED_PATHS else None
-    status, payload, raw = get_json(path, token=use_token)
+    status, payload, raw = get_json(path, token=token)
     if status != 200:
         return Result(path, False, f"status={status} body={raw[:160]}")
     if not isinstance(payload, dict):
@@ -150,28 +176,42 @@ def check_endpoint(path: str, expected_source: str, token: str | None) -> Result
     return Result(path, True, f"source={source} data_status={data_status} mock={mock}")
 
 
+def _cleanup_test_user() -> None:
+    """Remove injected invite code and contract_check_* user rows."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=5)
+        conn.execute("DELETE FROM invite_codes WHERE code=?", (_TEST_INVITE,))
+        conn.execute("DELETE FROM users WHERE phone LIKE 'contract_check_%'")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
 def main() -> int:
     exempt_paths = {p for p, _ in EXEMPT_ENDPOINTS}
     exempt_reasons = dict(EXEMPT_ENDPOINTS)
 
-    # 任何必需 JWT 的路径 → 提前拿 token，失败也继续（这些会以 401 失败可见）
     token = register_token() if any(p in AUTH_REQUIRED_PATHS for p, _ in CONTRACT_ENDPOINTS) else None
 
     results: list[Result] = []
     skipped_count = 0
-    for path, expected_source in CONTRACT_ENDPOINTS:
-        if path in exempt_paths:
-            print(f"[SKIP] {path} - exempt: {exempt_reasons[path]}")
-            skipped_count += 1
-            continue
-        if "{" in path:
-            print(f"[SKIP] {path} - parameterized path (验证留给 smoke_test 专用 fixture)")
-            skipped_count += 1
-            continue
-        result = check_endpoint(path, expected_source, token)
-        results.append(result)
-        mark = "PASS" if result.ok else "FAIL"
-        print(f"[{mark}] {result.path} - {result.detail}")
+    try:
+        for path, expected_source in CONTRACT_ENDPOINTS:
+            if path in exempt_paths:
+                print(f"[SKIP] {path} - exempt: {exempt_reasons[path]}")
+                skipped_count += 1
+                continue
+            if "{" in path:
+                print(f"[SKIP] {path} - parameterized path (验证留给 smoke_test 专用 fixture)")
+                skipped_count += 1
+                continue
+            result = check_endpoint(path, expected_source, token)
+            results.append(result)
+            mark = "PASS" if result.ok else "FAIL"
+            print(f"[{mark}] {result.path} - {result.detail}")
+    finally:
+        _cleanup_test_user()
 
     failed = [r for r in results if not r.ok]
     total = len(results)

@@ -32,6 +32,8 @@ class WatchItemIn(BaseModel):
     alert_change_down: Optional[float] = None    # 跌幅 % 触发（正数，内部转为负值匹配）
     alert_limit_up: bool = True
     alert_broken: bool = True
+    cost_price: Optional[float] = None
+    shares: Optional[int] = None
 
 
 class WatchPatch(BaseModel):
@@ -42,6 +44,8 @@ class WatchPatch(BaseModel):
     alert_change_down: Optional[float] = None
     alert_limit_up: Optional[bool] = None
     alert_broken: Optional[bool] = None
+    cost_price: Optional[float] = None
+    shares: Optional[int] = None
 
 
 # ============== CRUD ==============
@@ -84,13 +88,15 @@ def add_watch(item: WatchItemIn, user: dict = Depends(current_user)):
     new_id = execute(
         """INSERT INTO watchlist
            (user_id, code, name, group_name, note,
-            alert_change_up, alert_change_down, alert_limit_up, alert_broken)
-           VALUES (?,?,?,?,?,?,?,?,?)""",
+            alert_change_up, alert_change_down, alert_limit_up, alert_broken,
+            cost_price, shares)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (
             user["id"], code, item.name, item.group_name or "默认", item.note,
             item.alert_change_up, item.alert_change_down,
             1 if item.alert_limit_up else 0,
             1 if item.alert_broken else 0,
+            item.cost_price, item.shares,
         ),
     )
     return {"ok": True, "id": new_id}

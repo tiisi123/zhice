@@ -5,6 +5,16 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _safe_float(val, default: float = 0.0) -> float:
+    try:
+        if val in (None, "", "-"):
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
+
 SAMPLE_FINANCIALS: dict[str, dict] = {
     "600519": {
         "code": "600519", "name": "贵州茅台",
@@ -34,121 +44,28 @@ SAMPLE_FINANCIALS: dict[str, dict] = {
     },
 }
 
-ANALYST_EXPECTATIONS: dict[str, list[dict]] = {
-    "600519": [
-        {"broker": "中信证券", "rating": "买入", "target": 2100, "eps_2026e": 65.0},
-        {"broker": "华泰证券", "rating": "买入", "target": 1980, "eps_2026e": 62.5},
-        {"broker": "国泰君安", "rating": "增持", "target": 1900, "eps_2026e": 60.0},
-    ],
-    "300750": [
-        {"broker": "中信证券", "rating": "买入", "target": 280, "eps_2026e": 11.0},
-        {"broker": "招商证券", "rating": "买入", "target": 260, "eps_2026e": 10.5},
-        {"broker": "中金公司", "rating": "推荐", "target": 250, "eps_2026e": 10.0},
-    ],
-}
-
-
-FINANCIAL_REPORTS: dict[str, list[dict]] = {
-    "600519": [
-        {
-            "title": "贵州茅台2025年年度报告",
-            "date": "2026-03-29",
-            "type": "年报",
-            "period": "2025",
-            "revenue": "1505亿",
-            "net_profit": "750亿",
-            "eps": "59.7",
-            "yoy": "+16.8%",
-            "highlight": "直销收入占比提升至42%，产品均价环比上行",
-            "sentiment": "positive",
-        },
-        {
-            "title": "贵州茅台2025年三季报",
-            "date": "2025-10-28",
-            "type": "季报",
-            "period": "2025Q3",
-            "revenue": "1089亿",
-            "net_profit": "548亿",
-            "eps": "43.6",
-            "yoy": "+15.5%",
-            "highlight": "三季度末合同负债大幅回升，四季度发货预期较好",
-            "sentiment": "positive",
-        },
-        {
-            "title": "关于2025年度利润分配预案的公告",
-            "date": "2026-03-29",
-            "type": "公告",
-            "period": "2025",
-            "revenue": None,
-            "net_profit": None,
-            "eps": None,
-            "yoy": None,
-            "highlight": "拟每股派息30.876元（含税），分红率51.7%",
-            "sentiment": "positive",
-        },
-    ],
-    "300750": [
-        {
-            "title": "宁德时代2025年年度报告",
-            "date": "2026-04-15",
-            "type": "年报",
-            "period": "2025",
-            "revenue": "4010亿",
-            "net_profit": "452亿",
-            "eps": "10.32",
-            "yoy": "+30.5%",
-            "highlight": "海外收入占比突破40%，储能业务同比翻倍",
-            "sentiment": "positive",
-        },
-        {
-            "title": "宁德时代2025年三季报",
-            "date": "2025-10-25",
-            "type": "季报",
-            "period": "2025Q3",
-            "revenue": "2905亿",
-            "net_profit": "322亿",
-            "eps": "7.35",
-            "yoy": "+28.0%",
-            "highlight": "动力电池全球市占率37.1%，麒麟电池放量",
-            "sentiment": "positive",
-        },
-        {
-            "title": "关于签署战略合作框架协议的公告",
-            "date": "2026-04-08",
-            "type": "公告",
-            "period": None,
-            "revenue": None,
-            "net_profit": None,
-            "eps": None,
-            "yoy": None,
-            "highlight": "与某欧洲车企签署5年长期供货协议，预计金额超200亿欧元",
-            "sentiment": "positive",
-        },
-    ],
-}
-
-RESEARCH_REPORTS: dict[str, list[dict]] = {
-    "600519": [
-        {"broker": "中信证券", "date": "2026-04-10", "rating": "买入", "prev_rating": "买入", "target": 2100, "prev_target": 2000, "title": "年报点评：直销加速兑现，上调目标价", "summary": "2025年报超预期。直销占比提升推动毛利率改善，上调2026E EPS至65元。"},
-        {"broker": "华泰证券", "date": "2026-04-05", "rating": "买入", "prev_rating": "买入", "target": 1980, "prev_target": 1950, "title": "基本面坚实，分红提高凸显配置价值", "summary": "分红率提升至51.7%，股息率2.0%+。预收款回升指向Q1发货向好。"},
-        {"broker": "国泰君安", "date": "2026-03-30", "rating": "增持", "prev_rating": "增持", "target": 1900, "prev_target": 1900, "title": "年报符合预期，维持增持", "summary": "收入/利润增速与预期基本一致。社会库存仍偏高，关注终端动销节奏。"},
-        {"broker": "海通证券", "date": "2026-04-18", "rating": "优于大市", "prev_rating": "优于大市", "target": 2050, "prev_target": 1880, "title": "渠道改革深化，产品矩阵扩展", "summary": "i茅台持续贡献增量，系列酒增速超30%。上调目标价至2050元。"},
-    ],
-    "300750": [
-        {"broker": "中信证券", "date": "2026-04-20", "rating": "买入", "prev_rating": "买入", "target": 280, "prev_target": 250, "title": "海外订单超预期，上调盈利预测", "summary": "欧洲车企大单锁定5年需求。上调2026E净利至480亿，目标价280元。"},
-        {"broker": "招商证券", "date": "2026-04-16", "rating": "买入", "prev_rating": "强烈推荐", "target": 260, "prev_target": 240, "title": "年报高增长，储能成第二曲线", "summary": "储能收入同比+105%，占比升至18%。全球份额稳固，盈利韧性超预期。"},
-        {"broker": "中金公司", "date": "2026-04-12", "rating": "推荐", "prev_rating": "推荐", "target": 250, "prev_target": 230, "title": "技术领先驱动溢价，维持推荐", "summary": "神行/麒麟电池放量，CTP3.0降本5%+。看好固态电池中期突破。"},
-        {"broker": "国盛证券", "date": "2026-04-22", "rating": "买入", "prev_rating": "增持", "target": 275, "prev_target": 220, "title": "上调至买入，海外拐点已现", "summary": "欧洲匈牙利工厂投产在即，北美产能规划加速。评级上调至买入。"},
-    ],
-}
 
 
 def get_financial_reports(code: str) -> list[dict]:
-    return FINANCIAL_REPORTS.get(code, [])
+    """DFCF announcements (kind='report') → empty list on failure. No mock fallback (D009)."""
+    try:
+        from packages.connectors.registry import get_dfcf
+        dfcf = get_dfcf()
+        return dfcf.get_announcements(code, days=365, kind="report")
+    except Exception as e:
+        logger.warning("DFCF financial_reports fetch failed for %s: %s", code, e)
+        return []
 
 
 def get_research_reports(code: str) -> list[dict]:
-    return RESEARCH_REPORTS.get(code, [])
+    """DFCF research reports → empty list on failure. No mock fallback (D009)."""
+    try:
+        from packages.connectors.registry import get_dfcf
+        dfcf = get_dfcf()
+        return dfcf.get_research_reports(code, n=20)
+    except Exception as e:
+        logger.warning("DFCF research_reports fetch failed for %s: %s", code, e)
+        return []
 
 
 def _fetch_real_financial(code: str) -> Optional[dict]:
@@ -201,17 +118,78 @@ def _fetch_real_financial(code: str) -> Optional[dict]:
         return None
 
 
+def _fetch_tushare_financial(code: str) -> Optional[dict]:
+    """TuShare 降级源：per-stock fina_indicator + daily_basic + income."""
+    try:
+        from packages.connectors.registry import get_tushare
+
+        ts = get_tushare()
+        if not ts.configured:
+            return None
+
+        basic = ts.get_stock_basic(code)
+        daily = ts.get_daily_basic_latest(code)
+        indicator = ts.get_fina_indicator_latest(code)
+        income = ts.get_income_latest(code)
+        if not daily and not indicator and not income:
+            return None
+
+        revenue = _safe_float(income.get("total_revenue") or income.get("revenue"))
+        net_profit = _safe_float(income.get("n_income_attr_p") or income.get("n_income"))
+        market_cap = _safe_float(daily.get("total_mv")) * 10000
+        fcf = _safe_float(indicator.get("fcff") or indicator.get("fcfe"))
+        if fcf <= 0 and net_profit:
+            fcf = net_profit * 0.8
+
+        return {
+            "code": code,
+            "name": basic.get("name") or daily.get("ts_code") or code,
+            "industry": basic.get("industry", ""),
+            "revenue": revenue,
+            "revenue_yoy": _safe_float(indicator.get("or_yoy")),
+            "net_profit": net_profit,
+            "net_profit_yoy": _safe_float(indicator.get("netprofit_yoy")),
+            "gross_margin": _safe_float(indicator.get("grossprofit_margin")),
+            "net_margin": _safe_float(indicator.get("netprofit_margin")),
+            "roe": _safe_float(indicator.get("roe_dt") or indicator.get("roe")),
+            "roa": _safe_float(indicator.get("roa")),
+            "pe": _safe_float(daily.get("pe_ttm") or daily.get("pe")),
+            "pb": _safe_float(daily.get("pb")),
+            "ps": _safe_float(daily.get("ps_ttm") or daily.get("ps")),
+            "pe_percentile": 50,
+            "pb_percentile": 50,
+            "div_yield": _safe_float(daily.get("dv_ttm") or daily.get("dv_ratio")),
+            "debt_ratio": _safe_float(indicator.get("debt_to_assets")),
+            "fcf": fcf,
+            "eps": _safe_float(indicator.get("dt_eps") or indicator.get("eps")),
+            "market_cap": market_cap,
+            "latest_trade_date": daily.get("trade_date", ""),
+            "latest_report_date": indicator.get("end_date") or income.get("end_date") or "",
+            "highlights": [],
+            "risks": [],
+            "data_source": "tushare",
+        }
+    except Exception as e:
+        logger.debug("fetch tushare financial for %s failed: %s", code, e)
+        return None
+
+
 def get_financial(code: str) -> Optional[dict]:
+    """DFCF primary → TuShare fallback → None. No SAMPLE_FINANCIALS fallback (D009)."""
     real = _fetch_real_financial(code)
     if real:
         return real
-    mock = SAMPLE_FINANCIALS.get(code)
-    if mock:
-        mock["data_source"] = "mock"
-    return mock
+    logger.info("DFCF failed for %s, trying TuShare fallback", code)
+    ts_fin = _fetch_tushare_financial(code)
+    if ts_fin:
+        logger.info("TuShare fallback succeeded for %s", code)
+        return ts_fin
+    logger.warning("Both DFCF and TuShare failed for %s — returning None", code)
+    return None
 
 
 def get_expectations(code: str) -> list[dict]:
+    """DFCF research reports → analyst expectations. No mock fallback (D009)."""
     try:
         from packages.connectors.registry import get_dfcf
         dfcf = get_dfcf()
@@ -227,9 +205,9 @@ def get_expectations(code: str) -> list[dict]:
                 }
                 for r in reports if r.get("rating")
             ]
-    except Exception:
-        pass
-    return ANALYST_EXPECTATIONS.get(code, [])
+    except Exception as e:
+        logger.warning("DFCF expectations fetch failed for %s: %s", code, e)
+    return []
 
 
 def calc_dcf(fcf: float, growth_rate: float = 0.1, discount_rate: float = 0.08, years: int = 10, terminal_growth: float = 0.03) -> dict:
@@ -275,11 +253,78 @@ def calc_expectation_gap(code: str, actual_eps: float) -> dict:
 def screen_value_stocks(
     min_pe: float = 0, max_pe: float = 30,
     min_roe: float = 15, min_div: float = 1.0,
+    max_pb: float = 0, min_market_cap: float = 0,
 ) -> list[dict]:
+    try:
+        from packages.connectors.registry import get_tushare
+        ts = get_tushare()
+        if not ts.configured:
+            return []
+    except Exception:
+        return []
+
+    daily_rows = ts.get_daily_basic_all()
+    if not daily_rows:
+        return []
+
+    fina_rows = ts.get_fina_indicator_all()
+    fina_map: dict[str, dict] = {}
+    for row in fina_rows:
+        code = row.get("ts_code", "")
+        if code and code not in fina_map:
+            fina_map[code] = row
+
+    has_fina = bool(fina_map)
+    if not has_fina and min_roe > 0:
+        logger.warning("fina_indicator_all returned 0 rows; ROE filter (min_roe=%.1f) skipped", min_roe)
+
     result = []
-    for code, fin in SAMPLE_FINANCIALS.items():
-        if min_pe <= fin["pe"] <= max_pe and fin["roe"] >= min_roe and fin["div_yield"] >= min_div:
-            result.append(fin)
+    for row in daily_rows:
+        ts_code = row.get("ts_code", "")
+        if not ts_code:
+            continue
+
+        pe = _safe_float(row.get("pe_ttm") or row.get("pe"))
+        pb = _safe_float(row.get("pb"))
+        dv = _safe_float(row.get("dv_ttm") or row.get("dv_ratio"))
+        total_mv = _safe_float(row.get("total_mv"))
+        close = _safe_float(row.get("close"))
+
+        if pe <= 0 or pe < min_pe or pe > max_pe:
+            continue
+        if dv < min_div:
+            continue
+        if max_pb > 0 and pb > max_pb:
+            continue
+        if min_market_cap > 0 and total_mv * 10000 < min_market_cap:
+            continue
+
+        fina = fina_map.get(ts_code, {})
+        roe = _safe_float(fina.get("roe_dt") or fina.get("roe"))
+        if has_fina and roe < min_roe:
+            continue
+
+        raw_code = ts_code.split(".")[0] if "." in ts_code else ts_code
+        result.append({
+            "code": raw_code,
+            "ts_code": ts_code,
+            "name": "",
+            "pe": round(pe, 2),
+            "pb": round(pb, 2),
+            "ps": _safe_float(row.get("ps_ttm") or row.get("ps")),
+            "div_yield": round(dv, 2),
+            "roe": round(roe, 2),
+            "roa": _safe_float(fina.get("roa")),
+            "gross_margin": _safe_float(fina.get("grossprofit_margin")),
+            "net_margin": _safe_float(fina.get("netprofit_margin")),
+            "eps": _safe_float(fina.get("dt_eps") or fina.get("eps")),
+            "debt_ratio": _safe_float(fina.get("debt_to_assets")),
+            "market_cap": total_mv * 10000,
+            "close": close,
+            "data_source": "tushare",
+        })
+
+    result.sort(key=lambda x: x.get("roe", 0), reverse=True)
     return result
 
 
