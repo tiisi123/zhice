@@ -117,6 +117,71 @@ def _prev_trade_date(hist_keys: list[str], today: str) -> Optional[str]:
     return earlier[-1] if earlier else None
 
 
+def _parse_tier_num(name: str) -> Optional[int]:
+    m = re.search(r"\d+", str(name))
+    return int(m.group()) if m else None
+
+
+def _calc_promotion_stats(
+    today_tiers: dict, hist: dict, trade_date: str,
+) -> dict[str, dict]:
+    prev_date = _prev_trade_date(
+        [k for k in hist if k != trade_date], trade_date,
+    )
+    if not prev_date:
+        return {}
+
+    prev_day = hist.get(prev_date) or {}
+    today_snap = hist.get(trade_date) or {}
+
+    today_codes_by_tier: dict[int, set[str]] = {}
+    for tier_name, codes in today_snap.items():
+        n = _parse_tier_num(tier_name)
+        if n is not None:
+            today_codes_by_tier.setdefault(n, set()).update(codes)
+
+    stats: dict[str, dict] = {}
+    for tier_name, stocks in today_tiers.items():
+        n = _parse_tier_num(tier_name)
+        if n is None or n < 2:
+            stats[tier_name] = {
+                "promotion_rate": None,
+                "promoted_count": 0,
+                "from_count": 0,
+            }
+            continue
+        prev_lower = set(prev_day.get(str(n - 1), []))
+        if not prev_lower:
+            stats[tier_name] = {
+                "promotion_rate": None,
+                "promoted_count": 0,
+                "from_count": 0,
+            }
+            continue
+        promoted = prev_lower & today_codes_by_tier.get(n, set())
+        from_count = len(prev_lower)
+        stats[tier_name] = {
+            "promotion_rate": round(len(promoted) / from_count * 100, 1),
+            "promoted_count": len(promoted),
+            "from_count": from_count,
+        }
+    return stats
+
+
+def _calc_sector_concentration(stocks: list[dict]) -> list[dict]:
+    counts: dict[str, int] = {}
+    for s in stocks:
+        sectors = s.get("related_plates") or (
+            [s["first_plate_name"]] if s.get("first_plate_name") else []
+        )
+        for sec in sectors:
+            name = sec if isinstance(sec, str) else str(sec)
+            if name:
+                counts[name] = counts.get(name, 0) + 1
+    ranked = sorted(counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    return [{"name": n, "count": c} for n, c in ranked]
+
+
 @router.get("/summary")
 def market_summary(date: Optional[str] = Query(None), user: dict = Depends(require_vip("standard"))):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
@@ -165,9 +230,6 @@ def board_ladder(date: Optional[str] = Query(None)):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         data = _kpl.get_limit_up(trade_date)
-        # ladder uses EM-public limit_up; sentinel will only surface here if a
-        # prior call left state and get_limit_up cleared it. Belt-and-braces
-        # check anyway for cookie awareness consistency across short-line.
         unavail = _maybe_unavailable(
             _kpl, trade_date=trade_date, body={}, total=0, tiers={}
         )
@@ -177,8 +239,21 @@ def board_ladder(date: Optional[str] = Query(None)):
         result = {}
         for tier_name, stocks in sorted(tiers.items(), reverse=True):
             result[tier_name] = identify_leader(stocks)
-        # 快照（供接力率计算）
         _snapshot_ladder(trade_date, result)
+
+        hist = _load_json(_LADDER_HIST, {}) or {}
+        promo_stats = _calc_promotion_stats(result, hist, trade_date)
+
+        tier_stats = {}
+        for tier_name, stocks in result.items():
+            tier_promo = promo_stats.get(tier_name, {})
+            tier_stats[tier_name] = {
+                "promotion_rate": tier_promo.get("promotion_rate"),
+                "promoted_count": tier_promo.get("promoted_count", 0),
+                "from_count": tier_promo.get("from_count", 0),
+                "top_sectors": _calc_sector_concentration(stocks),
+            }
+
         return wrap_contract(
             result,
             source="kpl",
@@ -186,6 +261,7 @@ def board_ladder(date: Optional[str] = Query(None)):
             trade_date=trade_date,
             total=len(data or []),
             tiers=result,
+            tier_stats=tier_stats,
         )
     except Exception as e:
         return wrap_contract(
