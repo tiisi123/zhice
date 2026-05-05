@@ -7,11 +7,13 @@ from apps.ai.prompts.templates import (
     THEME_ANALYSIS,
     STRATEGY_DSL,
     BACKTEST_ANALYSIS,
+    EVENT_CHAIN_ANALYSIS,
 )
 from apps.ai.context_builders.market_context import (
     build_market_context,
     build_stock_context,
     build_theme_context,
+    build_event_chain_context,
 )
 
 
@@ -41,6 +43,13 @@ class HotThemeAgent:
 class StrategyBuilderAgent:
     def natural_language_to_dsl(self, user_input: str) -> str:
         prompt = STRATEGY_DSL.format(user_input=user_input)
+        return llm.chat(prompt)
+
+
+class EventChainAgent:
+    def analyze_chain(self, keyword: str, chain_data: dict, kpl_data: list[dict]) -> str:
+        context = build_event_chain_context(keyword, chain_data, kpl_data)
+        prompt = EVENT_CHAIN_ANALYSIS.format(keyword=keyword, context=context)
         return llm.chat(prompt)
 
 

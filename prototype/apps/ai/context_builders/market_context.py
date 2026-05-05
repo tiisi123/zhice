@@ -65,6 +65,48 @@ def build_stock_context(stock: dict, themes: list[str]) -> str:
 - 换手率: {stock.get('turnover_ratio', 0)}%"""
 
 
+def build_event_chain_context(keyword: str, chain_data: dict, kpl_data: list[dict]) -> str:
+    chain_name = chain_data.get("chain_name", keyword)
+    matched = chain_data.get("matched_chain", {})
+
+    sections = []
+    for stream, label in [("upstream", "上游"), ("midstream", "中游"), ("downstream", "下游")]:
+        segments = matched.get(stream, [])
+        if not segments:
+            continue
+        lines = []
+        for seg in segments:
+            stocks_str = "、".join(seg.get("stocks", [])[:5])
+            lines.append(f"  - {seg.get('name', '')}: {stocks_str}")
+        sections.append(f"### {label}\n" + "\n".join(lines))
+
+    chain_text = "\n\n".join(sections)
+
+    transmission = chain_data.get("transmission_logic", "")
+    lag = chain_data.get("transmission_lag", "")
+
+    kpl_text = ""
+    if kpl_data:
+        kpl_lines = []
+        for item in kpl_data[:15]:
+            name = item.get("Name", item.get("name", ""))
+            change = item.get("ChangePercent", item.get("change_percent", ""))
+            intensity = item.get("Intensity", item.get("intensity", ""))
+            kpl_lines.append(f"  - {name}: 涨跌{change}%, 强度{intensity}")
+        kpl_text = "\n### KPL实时概念数据\n" + "\n".join(kpl_lines)
+
+    return f"""## 产业链: {chain_name}
+
+{chain_text}
+
+### 传导逻辑
+{transmission}
+
+### 传导时滞
+{lag}
+{kpl_text}"""
+
+
 def build_theme_context(theme_name: str, stocks: list[dict]) -> str:
     stock_lines = ""
     for s in stocks[:10]:
