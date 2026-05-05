@@ -207,6 +207,44 @@ export interface ContractEnvelope<T> {
   trade_date?: string
 }
 
+// M004/S01 — board-replay structured response
+export interface BoardReplayStock {
+  stock_code: string
+  stock_name: string
+  price: number
+  change_rate: number
+  limit_time: string
+  seal_amount: number
+  board_count: number
+  sectors: string[]
+}
+
+export interface BoardReplayData {
+  first_board: BoardReplayStock[]
+  consecutive: BoardReplayStock[]
+  broken: BoardReplayStock[]
+}
+
+// M004/S01 — top-traders (famous seats)
+export interface EnrichedSeat {
+  name: string
+  famous_alias: string | null
+}
+
+export interface TopTraderStock {
+  stock_code: string
+  stock_name: string
+  change_rate: number
+  net_amount: number
+  amount: number
+  float_mv: number
+  turnover_ratio: number
+  concepts: string[]
+  buy_seats: EnrichedSeat[]
+  sell_seats: EnrichedSeat[]
+  t_seats: EnrichedSeat[]
+}
+
 export interface RegisterPayload {
   phone: string
   password: string

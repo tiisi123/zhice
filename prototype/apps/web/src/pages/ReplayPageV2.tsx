@@ -20,6 +20,8 @@ import {
   ProgressiveFold, AskAIChip, SectionHeader,
   type ContradictionRule,
 } from '../components/smart'
+import BoardReplayPanel from '../components/BoardReplayPanel'
+import TopTradersPanel from '../components/TopTradersPanel'
 
 // ========== 类型 ==========
 interface SectorRaw {
@@ -1533,6 +1535,8 @@ export default function ReplayPageV2() {
           { key: 'temperature', label: '情绪温度' },
           { key: 'ladder', label: '连板天梯' },
           { key: 'themes', label: '主线题材' },
+          { key: 'board-replay', label: '涨停复盘' },
+          { key: 'top-traders', label: '游资席位' },
           { key: 'risk', label: '风险验证' },
           { key: 'plan', label: '次日计划' },
         ]}
@@ -1568,6 +1572,13 @@ export default function ReplayPageV2() {
       <div id="replay-ladder">
         <SectionLadder ladder={ladder} relay={relay} />
       </div>
+      <div id="replay-board-replay">
+        <BoardReplayPanel date={selectedDate} />
+      </div>
+      <div id="replay-top-traders">
+        <TopTradersPanel date={selectedDate} />
+      </div>
+
       <div id="replay-risk">
         <SectionRiskRadar summary={summary} brokenData={brokenData} />
       </div>
