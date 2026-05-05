@@ -25,6 +25,7 @@ import subprocess
 import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 API_BASE = os.environ.get("ZHICE_API_BASE", "http://127.0.0.1:8000").rstrip("/")
@@ -46,7 +47,7 @@ ETF_REQUIRED_FIELDS = {
 
 
 def _get(path: str) -> tuple[int, dict | None]:
-    url = f"{API_BASE}{path}"
+    url = f"{API_BASE}{quote(path, safe='/:?=&')}"
     req = Request(url, headers={"Content-Type": "application/json"}, method="GET")
     try:
         with urlopen(req, timeout=30) as res:
