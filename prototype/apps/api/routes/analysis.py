@@ -7,11 +7,16 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
 
+import logging
+
 from apps.api.auth import current_user, require_vip
 from apps.api.db import execute, query_all, query_one
 from apps.api.utils.contract import wrap_contract
 from packages.connectors.registry import get_kpl
 from packages.features.analysis import build_broken_case, recommend_strategy
+from packages.features.chain.event_chain import analyze_event_chain
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _kpl = get_kpl()
@@ -46,6 +51,32 @@ def broken_cases(date: Optional[str] = Query(None)):
             trade_date=trade_date,
             total=0,
             by_reason={},
+        )
+
+
+@router.get("/event-chain")
+def event_chain(keyword: str = Query(..., min_length=1, max_length=50, description="事件关键词")):
+    try:
+        result = analyze_event_chain(keyword)
+
+        if result is None:
+            return wrap_contract(
+                {},
+                source="static_chain_registry",
+                status="empty",
+                message=f'未找到与"{keyword}"相关的产业链',
+            )
+
+        has_kpl = bool(result.get("kpl_enrichment"))
+        source = "kpl+llm" if has_kpl else "static_chain_registry"
+        return wrap_contract(result, source=source, status="real")
+    except Exception as e:
+        logger.error("event-chain failed for keyword=%s: %s", keyword, e, exc_info=True)
+        return wrap_contract(
+            {},
+            source="kpl+llm",
+            status="unavailable",
+            message=str(e),
         )
 
 
