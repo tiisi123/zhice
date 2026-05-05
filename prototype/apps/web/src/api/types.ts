@@ -172,6 +172,41 @@ export interface ApiMeta {
   name?: string
 }
 
+export interface BoardTradingInput {
+  style?: string
+  risk_preference?: string
+  focus_sectors?: string[]
+}
+
+export interface BoardTradingAdvice {
+  advice: string
+  style: string
+  risk_preference: string
+}
+
+export interface EtfRotationInput {
+  style?: string
+  investment_horizon?: string
+  risk_preference?: string
+}
+
+export interface EtfRotationAdvice {
+  advice: string
+  style: string
+  investment_horizon: string
+  risk_preference: string
+}
+
+export interface ContractEnvelope<T> {
+  data: T
+  data_status: DataStatus
+  source: string
+  mock: boolean
+  message: string
+  updated_at: string
+  trade_date?: string
+}
+
 export interface RegisterPayload {
   phone: string
   password: string

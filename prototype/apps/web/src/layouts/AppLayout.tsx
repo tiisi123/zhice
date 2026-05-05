@@ -39,6 +39,7 @@ const menuItems = [
     { key: '/stock-research', icon: <StockOutlined />, label: '标的研究' },
     { key: '/research-pool', icon: <EyeOutlined />, label: '研究池' },
     { key: '/strategy-workshop', icon: <ExperimentOutlined />, label: '策略工坊' },
+    { key: '/ai-agent', icon: <RobotOutlined />, label: 'AI 投研Agent' },
     { key: '/my-workspace', icon: <BuildOutlined />, label: '我的工作台' },
     { key: '/account/membership', icon: <CrownOutlined />, label: '会员' },
   ]},

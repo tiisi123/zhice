@@ -30,6 +30,7 @@ const StrategyWorkshopPage = lazy(() => import('./pages/StrategyWorkshopPage'))
 const MyWorkspacePage = lazy(() => import('./pages/MyWorkspacePage'))
 const MembershipPage = lazy(() => import('./pages/MembershipPage'))
 const CheckoutPage = lazy(() => import('./pages/CheckoutPage'))
+const AIAgentPage = lazy(() => import('./pages/AIAgentPage'))
 // M001/S01/T06: dev-only demo of DataStatusBadge; S02 will消费同一组件
 const DemoBadgePage = lazy(() => import('./pages/DemoBadgePage'))
 
@@ -111,6 +112,7 @@ function App() {
           <Route path="/onboarding" element={<StyleOnboardingPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/ai-agent" element={<AIAgentPage />} />
           <Route path="/feature-map" element={<FeatureMapPage />} />
           <Route path="/hot-events" element={<Navigate to="/theme-workshop?tab=events" replace />} />
           <Route path="/theme-workshop" element={<ThemeWorkshopPage />} />
