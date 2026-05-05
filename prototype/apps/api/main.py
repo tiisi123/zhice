@@ -43,6 +43,7 @@ from .routes import (
     finance,
     news,
     admin,
+    backtest,
 )
 from .ws_hub import hub
 from . import db  # noqa: F401  # trigger engine lazy build + best-effort admin seed
@@ -150,6 +151,7 @@ app.include_router(watchlist.router, prefix="/api/watchlist", tags=["watchlist"]
 app.include_router(finance.router, prefix="/api/finance", tags=["finance"])
 app.include_router(news.router, prefix="/api/news", tags=["news"])
 app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(backtest.router, prefix="/api/backtest", tags=["backtest"])
 app.include_router(ws.router, prefix="/api")
 
 
