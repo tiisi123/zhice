@@ -86,7 +86,10 @@ curl -fsS https://YOUR_DOMAIN/ | grep -q '<div id="root">'
 
 # From browser
 # 1. Open https://YOUR_DOMAIN/login — login form renders
-# 2. Login with admin credentials — redirects to /replay
+# 2. Login with admin / ZHICE_ADMIN_PASSWORD (the value set in deploy/.env)
+#    — redirects to /replay
 # 3. Navigate sidebar — all protected pages load
 # 4. Check /admin — invite codes, KPL cookie, health panels render
 ```
+
+The admin account is auto-created at first startup with username `admin` and the password from `ZHICE_ADMIN_PASSWORD`. Change the password after first login via the admin panel.

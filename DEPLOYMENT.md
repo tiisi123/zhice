@@ -104,13 +104,36 @@ curl -fsS http://localhost/api/health
 
 ### Updating Code
 
+To update to a new release tag:
+
 ```bash
 cd /opt/zhice
-git pull origin main
+git fetch origin
+git checkout v0.1.0-rc1          # or the desired release tag
 make deploy-up
 ```
 
 The API entrypoint runs `alembic upgrade head` on every start, so schema migrations apply automatically.
+
+### Rolling Back
+
+If a deployment fails or a release causes issues:
+
+```bash
+cd /opt/zhice
+git fetch origin
+git checkout v0.1.0-rc1          # previous known-good tag
+make deploy-up
+```
+
+**Database rollback**: Alembic downgrade is not tested for this release. If the new release added migrations that already ran, the safest approach for v0.1.0 is:
+
+1. Stop the stack: `make deploy-down`
+2. Back up the database: `docker exec zhice-db mysqldump -u root -p zhice > /tmp/zhice-backup.sql`
+3. For a full reset: `make deploy-down-clean` (wipes MySQL data), then redeploy from the prior tag
+4. For a restore: re-import with `mysql -u root -p zhice < /tmp/zhice-backup.sql` after restarting
+
+**First deployment**: If this is the first deploy and it fails, `make deploy-down-clean` + fix `.env` + `make deploy-up` is the simplest recovery.
 
 ### Auto-Deploy (CI/CD)
 
