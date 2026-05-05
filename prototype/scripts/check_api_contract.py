@@ -58,12 +58,40 @@ class Result:
     skipped: bool = False
 
 
+POST_ENDPOINTS: set[str] = {
+    "/api/ai/agent/board-trading",
+    "/api/ai/agent/etf-rotation",
+}
+
+
 def get_json(path: str, token: str | None = None) -> tuple[int, dict | None, str]:
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     encoded_path = quote(path, safe="/:?=&%")
     req = Request(f"{API_BASE}{encoded_path}", method="GET", headers=headers)
+    try:
+        with urlopen(req, timeout=15) as res:
+            text = res.read().decode("utf-8", errors="replace")
+            return res.status, json.loads(text), text
+    except HTTPError as e:
+        text = e.read().decode("utf-8", errors="replace")
+        try:
+            return e.code, json.loads(text), text
+        except json.JSONDecodeError:
+            return e.code, None, text
+    except (URLError, TimeoutError) as e:
+        return 0, None, str(e)
+    except json.JSONDecodeError as e:
+        return 200, None, f"invalid json: {e}"
+
+
+def post_json(path: str, body: dict | None = None, token: str | None = None) -> tuple[int, dict | None, str]:
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    payload = json.dumps(body or {}).encode()
+    req = Request(f"{API_BASE}{path}", data=payload, method="POST", headers=headers)
     try:
         with urlopen(req, timeout=15) as res:
             text = res.read().decode("utf-8", errors="replace")
@@ -129,7 +157,10 @@ def register_token() -> str | None:
 
 
 def check_endpoint(path: str, expected_source: str, token: str | None) -> Result:
-    status, payload, raw = get_json(path, token=token)
+    if path in POST_ENDPOINTS:
+        status, payload, raw = post_json(path, body={}, token=token)
+    else:
+        status, payload, raw = get_json(path, token=token)
     if status != 200:
         return Result(path, False, f"status={status} body={raw[:160]}")
     if not isinstance(payload, dict):

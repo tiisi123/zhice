@@ -96,6 +96,8 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     # 仅校验非空，不绑定具体 LLM 拼接形式。
     ("/api/ai/headline", ""),
     ("/api/ai/replay-report", ""),
+    ("/api/ai/agent/board-trading", ""),   # POST; source varies: kpl+llm or llm_mock
+    ("/api/ai/agent/etf-rotation", ""),    # POST; source varies: sample_engine+llm or llm_mock
     # ── /api/etf/* （source 来自 data.data_source，CI 默认 sample_engine）
     ("/api/etf/rotation/dashboard", ""),
     ("/api/etf/rotation-signals", ""),

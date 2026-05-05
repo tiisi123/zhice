@@ -19,6 +19,8 @@ from apps.ai.agents.agents import (
     HotThemeAgent,
     StrategyBuilderAgent,
     BacktestAnalystAgent,
+    BoardTradingAgent,
+    EtfRotationAgent,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,8 @@ _stock_agent = StockInsightAgent()
 _theme_agent = HotThemeAgent()
 _strategy_agent = StrategyBuilderAgent()
 _backtest_agent = BacktestAnalystAgent()
+_board_trading_agent = BoardTradingAgent()
+_etf_rotation_agent = EtfRotationAgent()
 
 
 @router.get("/headline")
@@ -261,3 +265,155 @@ def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
     except Exception:
         logger.exception("AI对话失败")
         raise HTTPException(status_code=500, detail="AI对话失败，请稍后重试")
+
+
+class BoardTradingInput(BaseModel):
+    style: str = "均衡"
+    risk_preference: str = "中等"
+    focus_sectors: list[str] = []
+
+
+@router.post("/agent/board-trading")
+def agent_board_trading(inp: BoardTradingInput):
+    user_style = f"风格: {inp.style}\n风险偏好: {inp.risk_preference}"
+    if inp.focus_sectors:
+        user_style += f"\n关注板块: {'、'.join(inp.focus_sectors)}"
+    try:
+        trade_date = datetime.now().strftime("%Y-%m-%d")
+        board_replay = {}
+        ladder = {}
+        top_traders_data: list[dict] = []
+        backtest_data = None
+        data_source = "kpl+llm"
+
+        try:
+            limit_up = _kpl.get_limit_up(trade_date)
+            broken = _kpl.get_broken(trade_date)
+            first_board = [s for s in limit_up if (s.get("board_count") or 1) == 1]
+            consecutive = [s for s in limit_up if (s.get("board_count") or 1) >= 2]
+            board_replay = {"first_board": first_board, "consecutive": consecutive, "broken": broken}
+        except Exception:
+            logger.warning("打板Agent: 涨停复盘数据获取失败，使用空数据")
+
+        try:
+            from apps.api.routes.replay import board_ladder
+            ladder_resp = board_ladder(date=trade_date)
+            ladder = {"tier_stats": ladder_resp.get("tier_stats", {})}
+        except Exception:
+            logger.warning("打板Agent: 梯队数据获取失败，使用空数据")
+
+        try:
+            from packages.features.longhu import build_top_traders
+            raw_stocks = _kpl.get_longhu_stocks(trade_date)
+            top_traders_data = build_top_traders(raw_stocks) if raw_stocks else []
+        except Exception:
+            logger.warning("打板Agent: 龙虎榜数据获取失败，使用空数据")
+
+        try:
+            from packages.features.backtest import run_board_backtest
+            bt = run_board_backtest(sub_strategy="首板", mode="sample", years=1)
+            backtest_data = bt if isinstance(bt, dict) else None
+        except Exception:
+            logger.warning("打板Agent: 回测数据获取失败，跳过")
+
+        advice = _board_trading_agent.generate_advice(
+            user_style=user_style,
+            board_replay=board_replay,
+            ladder=ladder,
+            top_traders=top_traders_data,
+            backtest=backtest_data,
+        )
+
+        return wrap_contract(
+            {"advice": advice, "style": inp.style, "risk_preference": inp.risk_preference},
+            source=data_source,
+            status="real",
+            trade_date=trade_date,
+        )
+    except Exception:
+        logger.exception("打板Agent生成建议失败")
+        try:
+            advice = _board_trading_agent.generate_advice(
+                user_style=user_style,
+                board_replay={},
+                ladder={},
+                top_traders=[],
+            )
+            return wrap_contract(
+                {"advice": advice, "style": inp.style, "risk_preference": inp.risk_preference},
+                source="llm_mock",
+                status="fallback",
+                message="数据源不可用，基于模板生成建议",
+            )
+        except Exception:
+            return wrap_contract(
+                {"advice": "", "style": inp.style, "risk_preference": inp.risk_preference},
+                source="kpl+llm",
+                status="unavailable",
+                message="数据源和LLM均不可用",
+            )
+
+
+class EtfRotationInput(BaseModel):
+    style: str = "均衡"
+    investment_horizon: str = "中期"
+    risk_preference: str = "中等"
+
+
+@router.post("/agent/etf-rotation")
+def agent_etf_rotation(inp: EtfRotationInput):
+    user_style = (f"风格: {inp.style}\n投资期限: {inp.investment_horizon}"
+                  f"\n风险偏好: {inp.risk_preference}")
+    try:
+        data_source = "sample_engine+llm"
+        signals_data: list[dict] = []
+        backtest_data = None
+
+        try:
+            from packages.features.etf import build_rotation_signals
+            result = build_rotation_signals(mode="sample")
+            signals_data = result.get("signals", []) if isinstance(result, dict) else []
+        except Exception:
+            logger.warning("ETF Agent: 轮动信号获取失败，使用空数据")
+
+        try:
+            from packages.features.backtest import run_etf_backtest
+            bt = run_etf_backtest(mode="sample", years=1)
+            backtest_data = bt if isinstance(bt, dict) else None
+        except Exception:
+            logger.warning("ETF Agent: 回测数据获取失败，跳过")
+
+        advice = _etf_rotation_agent.generate_advice(
+            user_style=user_style,
+            signals=signals_data,
+            backtest=backtest_data,
+        )
+
+        return wrap_contract(
+            {"advice": advice, "style": inp.style, "investment_horizon": inp.investment_horizon,
+             "risk_preference": inp.risk_preference},
+            source=data_source,
+            status="real",
+        )
+    except Exception:
+        logger.exception("ETF Agent生成建议失败")
+        try:
+            advice = _etf_rotation_agent.generate_advice(
+                user_style=user_style,
+                signals=[],
+            )
+            return wrap_contract(
+                {"advice": advice, "style": inp.style, "investment_horizon": inp.investment_horizon,
+                 "risk_preference": inp.risk_preference},
+                source="llm_mock",
+                status="fallback",
+                message="数据源不可用，基于模板生成建议",
+            )
+        except Exception:
+            return wrap_contract(
+                {"advice": "", "style": inp.style, "investment_horizon": inp.investment_horizon,
+                 "risk_preference": inp.risk_preference},
+                source="sample_engine+llm",
+                status="unavailable",
+                message="数据源和LLM均不可用",
+            )
