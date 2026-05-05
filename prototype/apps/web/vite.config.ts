@@ -7,6 +7,16 @@ export default defineConfig(({ mode }) => {
   const apiPort = env.VITE_API_PORT || '8000'
   return {
     plugins: [react()],
+    test: {
+      environment: 'happy-dom',
+      setupFiles: ['./src/test-setup.ts'],
+      include: ['src/**/*.test.{ts,tsx}'],
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'json-summary'],
+        include: ['src/pages/**', 'src/components/**', 'src/api/**'],
+      },
+    },
     build: {
       rollupOptions: {
         output: {
