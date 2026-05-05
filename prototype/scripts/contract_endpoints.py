@@ -98,6 +98,7 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/ai/replay-report", ""),
     # ── /api/etf/* （source 来自 data.data_source，CI 默认 sample_engine）
     ("/api/etf/rotation/dashboard", ""),
+    ("/api/etf/rotation-signals", ""),
     # ── /api/lab/* （需 JWT；check_api_contract 会先 register 取 token）
     ("/api/lab/alert-rules", "mysql_lab"),
     ("/api/lab/style-combo", "mysql_lab"),

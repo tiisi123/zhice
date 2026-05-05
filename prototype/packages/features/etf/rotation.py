@@ -108,6 +108,22 @@ ETF_SERIES: list[dict[str, Any]] = [
         "flows": [1.4, 0.9, 0.5, -0.4, -0.8, -1.1],
         "turnover": [1.0, 1.0, 1.1, 1.2, 1.3, 1.3],
     },
+    {
+        "code": "510300",
+        "name": "沪深300ETF",
+        "theme": "宽基",
+        "prices": [3.812, 3.825, 3.839, 3.851, 3.862, 3.871],
+        "flows": [1.5, 1.8, 2.0, 1.6, 1.3, 0.9],
+        "turnover": [0.9, 0.9, 1.0, 1.0, 1.1, 1.1],
+    },
+    {
+        "code": "510500",
+        "name": "中证500ETF",
+        "theme": "宽基",
+        "prices": [5.623, 5.641, 5.662, 5.688, 5.712, 5.733],
+        "flows": [0.8, 1.2, 1.5, 2.1, 2.6, 2.3],
+        "turnover": [1.1, 1.1, 1.2, 1.3, 1.4, 1.5],
+    },
 ]
 
 ROTATION_RULES: dict[str, list[dict[str, Any]]] = {
@@ -175,8 +191,8 @@ RECOMMENDED_POOL: list[dict[str, Any]] = [
     {"code": "159819", "name": "人工智能ETF", "bucket": "核心进攻", "status": "active"},
     {"code": "159770", "name": "机器人ETF", "bucket": "成长扩散", "status": "active"},
     {"code": "512000", "name": "券商ETF", "bucket": "风险偏好", "status": "active"},
-    {"code": "510300", "name": "沪深300ETF", "bucket": "宽基锚", "status": "planned"},
-    {"code": "510500", "name": "中证500ETF", "bucket": "宽基锚", "status": "planned"},
+    {"code": "510300", "name": "沪深300ETF", "bucket": "宽基锚", "status": "active"},
+    {"code": "510500", "name": "中证500ETF", "bucket": "宽基锚", "status": "active"},
     {"code": "510880", "name": "红利ETF", "bucket": "防御底仓", "status": "active"},
     {"code": "512800", "name": "银行ETF", "bucket": "防御底仓", "status": "active"},
     {"code": "518880", "name": "黄金ETF", "bucket": "避险对冲", "status": "active"},
@@ -808,4 +824,72 @@ def build_rotation_dashboard(source_code: str | None = None, mode: str = "auto")
             "启动评分采用价格与资金并重，适配隔夜节奏",
             "风险阈值按ETF波动率动态调整，避免统一阈值失真",
         ],
+    }
+
+
+def _map_rotation_signal(
+    metric: dict[str, Any],
+) -> tuple[str, int, dict[str, float], str]:
+    start_score = metric["start_score"]
+    thresholds = metric["risk_thresholds"]
+    change_5d = metric["change_5d"]
+    flow_3d = metric["flow_3d"]
+    capital_score = metric["capital_score"]
+    volatility = metric["volatility"]
+    breakout = metric["breakout"]
+    stage = metric["stage"]
+
+    momentum_factor = _normalize(change_5d, -4.0, 8.0)
+    trend_factor = _normalize(start_score, 0, 100)
+    vol_factor = 1.0 - _normalize(volatility, 0.5, 5.0)
+
+    composite = momentum_factor * 0.40 + trend_factor * 0.35 + vol_factor * 0.25
+    confidence = round(_clamp(composite * 100, 5, 95))
+
+    factors = {
+        "momentum": round(momentum_factor * 100, 1),
+        "trend": round(trend_factor * 100, 1),
+        "volatility_safety": round(vol_factor * 100, 1),
+    }
+
+    if start_score >= thresholds["entry"] and flow_3d > 0 and (breakout or stage in ("启动", "加速")):
+        signal = "加仓"
+        reasoning = f"启动分{start_score:.0f}突破进场线{thresholds['entry']:.0f}，资金3日净流入{flow_3d:.1f}亿，{stage}阶段适合加仓"
+    elif start_score < thresholds["exit"] or (change_5d < -2.0 and flow_3d < -1.0):
+        signal = "减仓"
+        reasoning = f"启动分{start_score:.0f}低于退出线{thresholds['exit']:.0f}，5日涨幅{change_5d:.1f}%，资金净流出，建议减仓"
+    else:
+        signal = "持有"
+        reasoning = f"启动分{start_score:.0f}处于观察区间[{thresholds['exit']:.0f}-{thresholds['entry']:.0f}]，维持现有仓位"
+
+    return signal, confidence, factors, reasoning
+
+
+def build_rotation_signals(mode: str = "auto") -> dict[str, Any]:
+    series, data_meta = _get_series_bundle(mode=mode)
+    metrics = _build_etf_metrics(series)
+    metrics_by_code = {m["code"]: m for m in metrics}
+
+    signals: list[dict[str, Any]] = []
+    for m in metrics:
+        signal, confidence, factors, reasoning = _map_rotation_signal(m)
+        signals.append({
+            "code": m["code"],
+            "name": m["name"],
+            "theme": m["theme"],
+            "signal": signal,
+            "confidence": confidence,
+            "factors": factors,
+            "reasoning": reasoning,
+            "data_flag": m["data_flag"],
+        })
+
+    signals.sort(key=lambda s: s["confidence"], reverse=True)
+
+    return {
+        "as_of": data_meta.get("as_of", TRADE_DATES[-1]),
+        "data_mode": data_meta.get("data_mode", "sample"),
+        "data_source": data_meta.get("data_source", "sample_engine"),
+        "etf_count": len(signals),
+        "signals": signals,
     }

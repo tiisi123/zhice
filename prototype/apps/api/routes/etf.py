@@ -5,7 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from apps.api.utils.contract import wrap_contract
-from packages.features.etf import build_rotation_dashboard
+from packages.features.etf import build_rotation_dashboard, build_rotation_signals
 
 router = APIRouter()
 
@@ -44,3 +44,20 @@ def etf_rotation_dashboard(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ETF轮动看板数据获取失败: {str(e)}")
+
+
+@router.get("/rotation-signals")
+def etf_rotation_signals(
+    mode: str = Query("auto", description="auto/live/sample"),
+):
+    try:
+        data = build_rotation_signals(mode=mode)
+        status, mock_flag = _MODE_TO_D004.get(data.get("data_mode", "sample"), ("mock", True))
+        return wrap_contract(
+            data,
+            source=data.get("data_source", "sample_engine"),
+            status=status,
+            mock=mock_flag,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ETF轮动信号获取失败: {str(e)}")
