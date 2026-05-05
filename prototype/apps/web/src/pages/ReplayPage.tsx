@@ -339,7 +339,10 @@ export default function ReplayPage() {
     }).finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { loadData(selectedDate) }, [selectedDate, loadData])
+  useEffect(() => {
+    const run = () => loadData(selectedDate)
+    run()
+  }, [selectedDate, loadData])
 
   return (
     <div>

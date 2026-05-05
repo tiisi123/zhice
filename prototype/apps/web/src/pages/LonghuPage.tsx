@@ -59,8 +59,30 @@ export default function LonghuPage() {
     }
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load() }, [date])
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi<{ rank: SeatRow[]; note?: string; source?: string; data_status?: string; mock?: boolean; message?: string }>('/longhu/rank', { date: date.format('YYYY-MM-DD'), top: '50' })
+        if (!cancelled) {
+          setRows(r.rank || [])
+          setErr('')
+          setMeta(extractMeta({ ...r, message: r.message || r.note }))
+        }
+      } catch {
+        if (!cancelled) {
+          setRows([])
+          setErr('龙虎榜接口不可用，当前不展示席位数据。')
+          setMeta(null)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [date])
 
   const filtered = filter ? rows.filter((r) => (r.alias || '').includes(filter) || r.seat.includes(filter)) : rows
 

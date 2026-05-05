@@ -53,9 +53,13 @@ export function useMarketWS(enabled: boolean): MarketWSData {
   const reconnectDelay = useRef(INITIAL_RECONNECT_DELAY)
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const enabledRef = useRef(enabled)
-  enabledRef.current = enabled
+  const connectRef = useRef<() => void>(() => {})
 
-  const cleanup = useCallback(() => {
+  useEffect(() => {
+    enabledRef.current = enabled
+  }, [enabled])
+
+  const teardown = useCallback(() => {
     if (reconnectTimer.current) {
       clearTimeout(reconnectTimer.current)
       reconnectTimer.current = null
@@ -68,12 +72,11 @@ export function useMarketWS(enabled: boolean): MarketWSData {
       wsRef.current.close()
       wsRef.current = null
     }
-    setConnected(false)
   }, [])
 
   const connect = useCallback(() => {
     if (!enabledRef.current) return
-    cleanup()
+    teardown()
 
     const ws = new WebSocket(getWsUrl())
     wsRef.current = ws
@@ -103,7 +106,7 @@ export function useMarketWS(enabled: boolean): MarketWSData {
       if (enabledRef.current) {
         reconnectTimer.current = setTimeout(() => {
           reconnectDelay.current = Math.min(reconnectDelay.current * 2, MAX_RECONNECT_DELAY)
-          connect()
+          connectRef.current()
         }, reconnectDelay.current)
       }
     }
@@ -111,16 +114,21 @@ export function useMarketWS(enabled: boolean): MarketWSData {
     ws.onerror = () => {
       ws.close()
     }
-  }, [cleanup])
+  }, [teardown])
+
+  useEffect(() => {
+    connectRef.current = connect
+  }, [connect])
 
   useEffect(() => {
     if (enabled) {
       connect()
-    } else {
-      cleanup()
     }
-    return cleanup
-  }, [enabled, connect, cleanup])
+    return () => {
+      teardown()
+      setConnected(false)
+    }
+  }, [enabled, connect, teardown])
 
   return { limitUp, broken, hot, anomaly, connected }
 }

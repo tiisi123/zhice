@@ -143,15 +143,17 @@ export default function GrowthPage() {
   const [isMock, setIsMock] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
-    void Promise.all([
-      fetchApi<{ indicators: AnyData[] }>('/growth/macro'),
-      fetchApi<{ industries: AnyData[] }>('/growth/prosperity'),
-    ]).then(([m, p]) => {
-      setMacro(m.indicators); setIndustries(p.industries)
-      setIsMock(m.indicators?.some((i: AnyData) => i.data_source === 'mock'))
-    })
-      .finally(() => setLoading(false))
+    void (async () => {
+      setLoading(true)
+      void Promise.all([
+        fetchApi<{ indicators: AnyData[] }>('/growth/macro'),
+        fetchApi<{ industries: AnyData[] }>('/growth/prosperity'),
+      ]).then(([m, p]) => {
+        setMacro(m.indicators); setIndustries(p.industries)
+        setIsMock(m.indicators?.some((i: AnyData) => i.data_source === 'mock'))
+      })
+        .finally(() => setLoading(false))
+    })()
   }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />

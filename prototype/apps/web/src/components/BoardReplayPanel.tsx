@@ -76,24 +76,26 @@ export default function BoardReplayPanel({ date }: Props) {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    fetchApi<AnyData>(`/analysis/board-replay?date=${date}`)
-      .then((res) => {
-        if (!active) return
-        setRaw(res)
-        const d = res?.data
-        if (d && (d.first_board || d.consecutive || d.broken)) {
-          setData({
-            first_board: d.first_board || [],
-            consecutive: d.consecutive || [],
-            broken: d.broken || [],
-          })
-        } else {
-          setData(null)
-        }
-      })
-      .catch(() => { if (active) { setData(null); setRaw(null) } })
-      .finally(() => { if (active) setLoading(false) })
+    void (() => {
+      setLoading(true)
+      fetchApi<AnyData>(`/analysis/board-replay?date=${date}`)
+        .then((res) => {
+          if (!active) return
+          setRaw(res)
+          const d = res?.data
+          if (d && (d.first_board || d.consecutive || d.broken)) {
+            setData({
+              first_board: d.first_board || [],
+              consecutive: d.consecutive || [],
+              broken: d.broken || [],
+            })
+          } else {
+            setData(null)
+          }
+        })
+        .catch(() => { if (active) { setData(null); setRaw(null) } })
+        .finally(() => { if (active) setLoading(false) })
+    })()
     return () => { active = false }
   }, [date])
 

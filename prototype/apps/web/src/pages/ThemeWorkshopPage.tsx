@@ -216,27 +216,34 @@ function ThemeDetailPanel({ name, cycles }: { name: string; cycles: Record<strin
 
   useEffect(() => {
     if (!name) return
-    setLoading(true)
-    setStocks([])
-    fetchApi<AnyData>(`/theme/cycle/${encodeURIComponent(name)}?days=10`)
-      .then(r => setCycle(r))
-      .catch(() => setCycle(null))
-    fetchApi<{ data: DetailStock[] }>(`/theme/sectors`)
-      .then(res => {
-        const sec = (res.data || []).find((s: AnyData) =>
-          pick(s as Sector) === name
-        )
-        if (sec) {
-          const pid = plateId(sec as Sector)
-          if (pid) {
-            fetchApi<{ data: DetailStock[] }>(`/theme/sectors/${pid}`)
-              .then(r => setStocks(r.data || []))
-              .catch(() => setStocks([]))
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      setStocks([])
+      try {
+        const [cycleRes, secRes] = await Promise.allSettled([
+          fetchApi<AnyData>(`/theme/cycle/${encodeURIComponent(name)}?days=10`),
+          fetchApi<{ data: DetailStock[] }>(`/theme/sectors`),
+        ])
+        if (cancelled) return
+        setCycle(cycleRes.status === 'fulfilled' ? cycleRes.value : null)
+        if (secRes.status === 'fulfilled') {
+          const sec = (secRes.value.data || []).find((s: AnyData) => pick(s as Sector) === name)
+          if (sec) {
+            const pid = plateId(sec as Sector)
+            if (pid) {
+              try {
+                const r = await fetchApi<{ data: DetailStock[] }>(`/theme/sectors/${pid}`)
+                if (!cancelled) setStocks(r.data || [])
+              } catch { if (!cancelled) setStocks([]) }
+            }
           }
         }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
+      } catch { /* ignore */ }
+      if (!cancelled) setLoading(false)
+    }
+    void run()
+    return () => { cancelled = true }
   }, [name])
 
   if (!name) return <Card size="small"><Empty description="点击左侧题材查看详情" /></Card>
@@ -427,30 +434,40 @@ export default function ThemeWorkshopPage() {
   const [meta, setMeta] = useState<ApiMeta | null>(null)
 
   useEffect(() => {
-    setLoading(true)
-    setErr('')
-    setMeta(null)
-    Promise.all([
-      fetchApi<{ data: Sector[]; source?: string; data_status?: string; mock?: boolean; message?: string }>('/theme/sectors'),
-      fetchApi<{ items: CycleItem[] }>('/theme/cycle-batch?top=20'),
-    ]).then(([sec, cyc]) => {
-      const data = (sec.data || []).sort((a, b) =>
-        pickNum(b, 'intensity') - pickNum(a, 'intensity')
-      )
-      setSectors(data)
-      setMeta(extractMeta(sec))
-      const m: Record<string, CycleItem> = {}
-      for (const c of cyc.items || []) m[c.name] = c
-      setCycles(m)
-      if (data.length > 0 && !selected) {
-        setSelected(pick(data[0]))
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      setErr('')
+      setMeta(null)
+      try {
+        const [sec, cyc] = await Promise.all([
+          fetchApi<{ data: Sector[]; source?: string; data_status?: string; mock?: boolean; message?: string }>('/theme/sectors'),
+          fetchApi<{ items: CycleItem[] }>('/theme/cycle-batch?top=20'),
+        ])
+        if (cancelled) return
+        const data = (sec.data || []).sort((a, b) =>
+          pickNum(b, 'intensity') - pickNum(a, 'intensity')
+        )
+        setSectors(data)
+        setMeta(extractMeta(sec))
+        const m: Record<string, CycleItem> = {}
+        for (const c of cyc.items || []) m[c.name] = c
+        setCycles(m)
+        if (data.length > 0 && !selected) {
+          setSelected(pick(data[0]))
+        }
+      } catch {
+        if (!cancelled) {
+          const msg = '题材接口不可用，当前不展示题材数据。'
+          setErr(msg)
+          message.error(msg)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-    }).catch(() => {
-      const msg = '题材接口不可用，当前不展示题材数据。'
-      setErr(msg)
-      message.error(msg)
-    })
-      .finally(() => setLoading(false))
+    }
+    void run()
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

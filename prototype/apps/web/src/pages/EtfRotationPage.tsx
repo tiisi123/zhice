@@ -171,11 +171,13 @@ export default function EtfRotationPage() {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    fetchApi<DashboardData>('/etf/rotation/dashboard', { source: sourceCode, mode: dataMode })
-      .then((res) => { if (active) { setDashboard(res); if (res.source_code) setSourceCode(res.source_code) } })
-      .catch(() => { if (active) setDashboard(null) })
-      .finally(() => { if (active) setLoading(false) })
+    void (async () => {
+      setLoading(true)
+      fetchApi<DashboardData>('/etf/rotation/dashboard', { source: sourceCode, mode: dataMode })
+        .then((res) => { if (active) { setDashboard(res); if (res.source_code) setSourceCode(res.source_code) } })
+        .catch(() => { if (active) setDashboard(null) })
+        .finally(() => { if (active) setLoading(false) })
+    })()
     return () => { active = false }
   }, [sourceCode, dataMode])
 

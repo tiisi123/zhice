@@ -70,10 +70,17 @@ export default function ValuationPage() {
     setAiLoading(false)
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load(code) }, [code])
   useEffect(() => {
-    void fetchApi<AnyData>('/value/screen?max_pe=30&min_roe=15&min_div=1.0').then(r => setScreen(r.stocks || []))
+    const run = async () => { await load(code) }
+    void run()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code])
+  useEffect(() => {
+    const run = async () => {
+      const r = await fetchApi<AnyData>('/value/screen?max_pe=30&min_roe=15&min_div=1.0')
+      setScreen(r.stocks || [])
+    }
+    void run()
   }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />

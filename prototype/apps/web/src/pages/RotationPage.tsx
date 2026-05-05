@@ -100,15 +100,18 @@ function NoveltyTab() {
   const [data, setData] = useState<NoveltyRow[]>([])
   const [loading, setLoading] = useState(false)
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const r = await fetchApi<{ themes: NoveltyRow[] }>('/rotation/novelty', { days: '3' })
-      setData(r.themes || [])
-    } finally { setLoading(false) }
-  }
-
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi<{ themes: NoveltyRow[] }>('/rotation/novelty', { days: '3' })
+        if (!cancelled) setData(r.themes || [])
+      } finally { if (!cancelled) setLoading(false) }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <Card>

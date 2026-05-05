@@ -115,7 +115,10 @@ export default function ReportArchivePage() {
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { loadReports() }, [])
+  useEffect(() => {
+    const run = () => loadReports()
+    run()
+  }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />
 

@@ -45,18 +45,20 @@ export default function EtfBacktestPanel() {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    const params = new URLSearchParams({ mode, years: String(years) })
-    fetchApi<AnyData>(`/backtest/etf-rotation?${params}`)
-      .then((res) => {
-        if (!active) return
-        setRaw(res)
-        setData(res?.data ?? null)
-      })
-      .catch(() => {
-        if (active) { setRaw(null); setData(null) }
-      })
-      .finally(() => { if (active) setLoading(false) })
+    void (() => {
+      setLoading(true)
+      const params = new URLSearchParams({ mode, years: String(years) })
+      fetchApi<AnyData>(`/backtest/etf-rotation?${params}`)
+        .then((res) => {
+          if (!active) return
+          setRaw(res)
+          setData(res?.data ?? null)
+        })
+        .catch(() => {
+          if (active) { setRaw(null); setData(null) }
+        })
+        .finally(() => { if (active) setLoading(false) })
+    })()
     return () => { active = false }
   }, [mode, years])
 

@@ -23,8 +23,11 @@ function AnnouncementsTab() {
       setStatus({ source: (r as AnyData).source, data_status: (r as AnyData).data_status, mock: (r as AnyData).mock, message: (r as AnyData).message })
     } finally { setLoading(false) }
   }
+  useEffect(() => {
+    const run = async () => { await load() }
+    void run()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load() }, [days, kind])
+  }, [days, kind])
 
   return (
     <div>
@@ -118,8 +121,11 @@ function AltDataTab() {
     setRows(r.items)
     setStatus({ source: (r as AnyData).source, data_status: (r as AnyData).data_status, mock: (r as AnyData).mock, message: (r as AnyData).message })
   }
+  useEffect(() => {
+    const run = async () => { await load() }
+    void run()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load() }, [industry])
+  }, [industry])
 
   return (
     <div>
@@ -168,8 +174,11 @@ function SellsideTab() {
     setRows(r.timeline)
     setStatus({ source: (r as AnyData).source, data_status: (r as AnyData).data_status, mock: (r as AnyData).mock, message: (r as AnyData).message })
   }
+  useEffect(() => {
+    const run = async () => { await load() }
+    void run()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load() }, [code])
+  }, [code])
 
   return (
     <div>

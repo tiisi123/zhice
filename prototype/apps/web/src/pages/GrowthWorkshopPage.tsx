@@ -148,19 +148,21 @@ export default function GrowthWorkshopPage() {
   const [dataStatus, setDataStatus] = useState<AnyData[]>([])
 
   useEffect(() => {
-    setLoading(true)
-    void Promise.all([
-      fetchApi<{ indicators: AnyData[] }>('/growth/macro').catch(() => ({ indicators: [] })),
-      fetchApi<{ industries: AnyData[] }>('/growth/prosperity').catch(() => ({ industries: [] })),
-    ]).then(([m, p]) => {
-      setMacro(m.indicators || [])
-      setIndustries(p.industries || [])
-      setIsMock(Boolean((m as AnyData).mock || (p as AnyData).mock || m.indicators?.some((i: AnyData) => i.data_source === 'mock')))
-      setDataStatus([
-        { label: '宏观', source: (m as AnyData).source, data_status: (m as AnyData).data_status, message: (m as AnyData).message },
-        { label: '景气', source: (p as AnyData).source, data_status: (p as AnyData).data_status, message: (p as AnyData).message },
-      ])
-    }).finally(() => setLoading(false))
+    void (async () => {
+      setLoading(true)
+      void Promise.all([
+        fetchApi<{ indicators: AnyData[] }>('/growth/macro').catch(() => ({ indicators: [] })),
+        fetchApi<{ industries: AnyData[] }>('/growth/prosperity').catch(() => ({ industries: [] })),
+      ]).then(([m, p]) => {
+        setMacro(m.indicators || [])
+        setIndustries(p.industries || [])
+        setIsMock(Boolean((m as AnyData).mock || (p as AnyData).mock || m.indicators?.some((i: AnyData) => i.data_source === 'mock')))
+        setDataStatus([
+          { label: '宏观', source: (m as AnyData).source, data_status: (m as AnyData).data_status, message: (m as AnyData).message },
+          { label: '景气', source: (p as AnyData).source, data_status: (p as AnyData).data_status, message: (p as AnyData).message },
+        ])
+      }).finally(() => setLoading(false))
+    })()
   }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />

@@ -104,16 +104,18 @@ export default function TopTradersPanel({ date }: Props) {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    fetchApi<AnyData>(`/analysis/top-traders?date=${date}`)
-      .then((res) => {
-        if (!active) return
-        setRaw(res)
-        const d = res?.data
-        setStocks(Array.isArray(d) ? d : [])
-      })
-      .catch(() => { if (active) { setStocks([]); setRaw(null) } })
-      .finally(() => { if (active) setLoading(false) })
+    void (() => {
+      setLoading(true)
+      fetchApi<AnyData>(`/analysis/top-traders?date=${date}`)
+        .then((res) => {
+          if (!active) return
+          setRaw(res)
+          const d = res?.data
+          setStocks(Array.isArray(d) ? d : [])
+        })
+        .catch(() => { if (active) { setStocks([]); setRaw(null) } })
+        .finally(() => { if (active) setLoading(false) })
+    })()
     return () => { active = false }
   }, [date])
 

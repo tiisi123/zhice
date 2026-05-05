@@ -16,8 +16,14 @@ function DiffusionTab() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
-    void fetchApi('/value/diffusion').then(setData).finally(() => setLoading(false))
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi('/value/diffusion')
+        setData(r)
+      } finally { setLoading(false) }
+    }
+    void run()
   }, [])
 
   if (loading || !data) return <Spin />
@@ -110,8 +116,11 @@ function HistoricalCycleTab() {
     const r = await fetchApi<AnyData>('/research/prosperity-cycle', { industry })
     setData(r)
   }
+  useEffect(() => {
+    const run = async () => { await load() }
+    void run()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { void load() }, [])
+  }, [])
 
   useEffect(() => {
     if (!data || !chartRef.current) return
@@ -179,7 +188,10 @@ function MacroTransmissionTab() {
       setChain(r.transmission || [])
     } finally { setLoading(false) }
   }
-  useEffect(() => { void load(change) }, [change])
+  useEffect(() => {
+    const run = async () => { await load(change) }
+    void run()
+  }, [change])
 
   const layerColor = (layer: string) =>
     layer.startsWith('宏观') ? '#1677ff'
@@ -245,7 +257,10 @@ function ChainProsperityTab() {
       setStreams(r.streams || [])
     } catch { setStreams([]) } finally { setLoading(false) }
   }
-  useEffect(() => { void load(chainName) }, [chainName])
+  useEffect(() => {
+    const run = async () => { await load(chainName) }
+    void run()
+  }, [chainName])
 
   const tone = (p: number) => p >= 80 ? '#f5222d' : p >= 65 ? '#fa8c16' : p >= 50 ? '#faad14' : '#52c41a'
   const label = (p: number) => p >= 80 ? '高景气' : p >= 65 ? '景气回升' : p >= 50 ? '中性' : '承压'

@@ -142,10 +142,10 @@ function HotStockPanel({ data }: { data: AnyData[] }) {
 }
 
 export default function IntradayPage() {
-  const [limitUp, setLimitUp] = useState<LimitUpStock[]>([])
-  const [broken, setBroken] = useState<LimitUpStock[]>([])
-  const [hot, setHot] = useState<AnyData[]>([])
-  const [_anomaly, setAnomaly] = useState<AnyData[]>([])
+  const [httpLimitUp, setLimitUp] = useState<LimitUpStock[]>([])
+  const [httpBroken, setBroken] = useState<LimitUpStock[]>([])
+  const [httpHot, setHot] = useState<AnyData[]>([])
+  const [_httpAnomaly, setAnomaly] = useState<AnyData[]>([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [isMock, setIsMock] = useState(false)
@@ -153,14 +153,9 @@ export default function IntradayPage() {
 
   const ws = useMarketWS(autoRefresh)
 
-  useEffect(() => {
-    if (ws.connected) {
-      if (ws.limitUp.length) setLimitUp(ws.limitUp)
-      if (ws.broken.length) setBroken(ws.broken)
-      if (ws.hot.length) setHot(ws.hot)
-      if (ws.anomaly.length) setAnomaly(ws.anomaly)
-    }
-  }, [ws.limitUp, ws.broken, ws.hot, ws.anomaly, ws.connected])
+  const limitUp = ws.connected && ws.limitUp.length ? ws.limitUp : httpLimitUp
+  const broken = ws.connected && ws.broken.length ? ws.broken : httpBroken
+  const hot = ws.connected && ws.hot.length ? ws.hot : httpHot
 
   useEffect(() => {
     const load = async () => {

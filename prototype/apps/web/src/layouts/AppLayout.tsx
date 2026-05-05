@@ -92,7 +92,8 @@ export default function AppLayout() {
 
   // 移动端默认折叠
   useEffect(() => {
-    setCollapsed(isMobile)
+    const sync = () => setCollapsed(isMobile)
+    sync()
   }, [isMobile])
 
   // 监听全局 askAI 事件：自动打开 Copilot 抽屉

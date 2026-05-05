@@ -201,8 +201,7 @@ function PulseChart({ limitUp, broken, nowMin }: { limitUp: LimitUpStock[]; brok
       const idx = SESSION_BUCKETS.findIndex(b => m >= b.from && m < b.to)
       if (idx >= 0) br[idx]++
     })
-    let acc = 0
-    const cumArr = lu.map(v => (acc += v))
+    const cumArr = lu.reduce<number[]>((arr, v) => { arr.push((arr.at(-1) ?? 0) + v); return arr }, [])
     return { luBuckets: lu, brBuckets: br, cum: cumArr }
   }, [limitUp, broken])
 
@@ -508,10 +507,10 @@ function AnomalyFlows({ limitUp, broken, hot, anomaly }: {
 
 // ========== 主组件 ==========
 export default function IntradayPageV2() {
-  const [limitUp, setLimitUp] = useState<LimitUpStock[]>([])
-  const [broken, setBroken] = useState<LimitUpStock[]>([])
-  const [hot, setHot] = useState<AnyData[]>([])
-  const [anomaly, setAnomaly] = useState<AnyData[]>([])
+  const [httpLimitUp, setLimitUp] = useState<LimitUpStock[]>([])
+  const [httpBroken, setBroken] = useState<LimitUpStock[]>([])
+  const [httpHot, setHot] = useState<AnyData[]>([])
+  const [httpAnomaly, setAnomaly] = useState<AnyData[]>([])
   const [sectors, setSectors] = useState<SectorRaw[]>([])
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(false)
@@ -521,11 +520,10 @@ export default function IntradayPageV2() {
 
   const ws = useMarketWS(autoRefresh)
 
-  useEffect(() => {
-    if (ws.connected) {
-      setLimitUp(ws.limitUp); setBroken(ws.broken); setHot(ws.hot); setAnomaly(ws.anomaly)
-    }
-  }, [ws.limitUp, ws.broken, ws.hot, ws.anomaly, ws.connected])
+  const limitUp = ws.connected && ws.limitUp.length ? ws.limitUp : httpLimitUp
+  const broken = ws.connected && ws.broken.length ? ws.broken : httpBroken
+  const hot = ws.connected && ws.hot.length ? ws.hot : httpHot
+  const anomaly = ws.connected && ws.anomaly.length ? ws.anomaly : httpAnomaly
 
   useEffect(() => {
     const load = async () => {

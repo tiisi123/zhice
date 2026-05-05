@@ -377,11 +377,13 @@ export default function SentimentPageV2() {
   const [days, setDays] = useState(30)
 
   useEffect(() => {
-    setLoading(true)
-    fetchApi<{ data: SentimentRecord[] }>(`/market/sentiment-history?days=${days}`)
-      .then(r => setData(r.data || []))
-      .catch(() => setData([]))
-      .finally(() => setLoading(false))
+    void (async () => {
+      setLoading(true)
+      fetchApi<{ data: SentimentRecord[] }>(`/market/sentiment-history?days=${days}`)
+        .then(r => setData(r.data || []))
+        .catch(() => setData([]))
+        .finally(() => setLoading(false))
+    })()
   }, [days])
 
   useEffect(() => {

@@ -15,12 +15,14 @@ export default function AIInlineSummary({ endpoint, params, field = 'headline', 
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    setLoading(true)
-    const qs = params ? '?' + new URLSearchParams(params).toString() : ''
-    fetchApi<Record<string, unknown>>(`${endpoint}${qs}`)
-      .then(r => setText(String(r[field] || '') ))
-      .catch(() => setText(''))
-      .finally(() => setLoading(false))
+    void (async () => {
+      setLoading(true)
+      const qs = params ? '?' + new URLSearchParams(params).toString() : ''
+      fetchApi<Record<string, unknown>>(`${endpoint}${qs}`)
+        .then(r => setText(String(r[field] || '') ))
+        .catch(() => setText(''))
+        .finally(() => setLoading(false))
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint, JSON.stringify(params), field])
 

@@ -97,11 +97,20 @@ function PatternMatchCard({ code, name }: { code: string; name: string }) {
 
   useEffect(() => {
     if (!code) return
-    setLoading(true)
-    fetchApi<AnyData>(`/stock/${code}/pattern-match?top_k=5`)
-      .then(r => { setData(r); setSelectedId(r?.matches?.[0]?.id || null) })
-      .catch(() => setData(null))
-      .finally(() => setLoading(false))
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi<AnyData>(`/stock/${code}/pattern-match?top_k=5`)
+        if (!cancelled) { setData(r); setSelectedId(r?.matches?.[0]?.id || null) }
+      } catch {
+        if (!cancelled) setData(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
   }, [code])
 
   useEffect(() => {
@@ -205,16 +214,35 @@ export default function StockPage() {
     setLoading(false)
   }
 
-  useEffect(() => { if (routeCode) { setCode(routeCode); setInputCode(routeCode) } }, [routeCode])
-  useEffect(() => { if (code) void load(code) }, [code])
+  useEffect(() => {
+    if (routeCode) {
+      const sync = () => { setCode(routeCode); setInputCode(routeCode) }
+      sync()
+    }
+  }, [routeCode])
+  useEffect(() => {
+    if (code) {
+      const run = async () => { await load(code) }
+      void run()
+    }
+  }, [code])
 
   useEffect(() => {
     if (data?.found && code) {
-      setInsightLoading(true)
-      fetchApi<AnyData>(`/ai/stock-insight/${code}`)
-        .then(r => setInsight(r.report))
-        .catch(() => setInsight(null))
-        .finally(() => setInsightLoading(false))
+      let cancelled = false
+      const run = async () => {
+        setInsightLoading(true)
+        try {
+          const r = await fetchApi<AnyData>(`/ai/stock-insight/${code}`)
+          if (!cancelled) setInsight(r.report)
+        } catch {
+          if (!cancelled) setInsight(null)
+        } finally {
+          if (!cancelled) setInsightLoading(false)
+        }
+      }
+      void run()
+      return () => { cancelled = true }
     }
   }, [data, code])
 

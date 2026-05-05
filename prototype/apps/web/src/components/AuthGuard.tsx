@@ -20,16 +20,18 @@ export default function AuthGuard({ children }: Props) {
   useEffect(() => {
     const t = getToken()
     if (t && !getUser()) {
-      setChecking(true)
-      fetchApi<{ user: User }>('/auth/me')
-        .then((r) => {
-          setUser(r.user)
-          setLocalUser(r.user)
-        })
-        .catch(() => {
-          clearAuth()
-        })
-        .finally(() => setChecking(false))
+      void (() => {
+        setChecking(true)
+        fetchApi<{ user: User }>('/auth/me')
+          .then((r) => {
+            setUser(r.user)
+            setLocalUser(r.user)
+          })
+          .catch(() => {
+            clearAuth()
+          })
+          .finally(() => setChecking(false))
+      })()
     }
   }, [])
 

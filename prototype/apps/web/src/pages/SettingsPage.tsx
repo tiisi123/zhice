@@ -22,7 +22,24 @@ export default function SettingsPage() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const [e, s] = await Promise.all([
+          fetchApi<{ events: AnyData[] }>('/events/mine', { limit: '100' }),
+          fetchApi<{ stats: { event: string; cnt: number }[] }>('/events/stats', { days: '7' }),
+        ])
+        if (!cancelled) {
+          setEvents(e.events)
+          setStats(s.stats)
+        }
+      } finally { if (!cancelled) setLoading(false) }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <div>

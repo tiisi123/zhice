@@ -96,7 +96,10 @@ function AlertRulesTab() {
     const r = await fetchApi<{ items: Rule[] }>('/lab/alert-rules')
     setRules(r.items)
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    const run = async () => { await load() }
+    void run()
+  }, [])
 
   const save = async () => {
     const v = await form.validateFields()
@@ -240,7 +243,10 @@ function StyleComboTab() {
     const r = await fetchApi<{ styles: string[] }>('/lab/style-combo')
     setStyles(r.styles)
   }
-  useEffect(() => { void load() }, [])
+  useEffect(() => {
+    const run = async () => { await load() }
+    void run()
+  }, [])
 
   const save = async () => {
     if (styles.length === 0) { message.warning('至少选择一个风格'); return }

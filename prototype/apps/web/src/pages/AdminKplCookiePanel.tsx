@@ -96,7 +96,6 @@ export default function AdminKplCookiePanel() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshMeta()
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void refreshHealth()
   }, [refreshMeta, refreshHealth])
 

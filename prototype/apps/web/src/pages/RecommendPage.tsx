@@ -58,8 +58,14 @@ export default function RecommendPage() {
   const [explainName, setExplainName] = useState('')
 
   useEffect(() => {
-    setLoading(true)
-    void fetchApi<RecommendResp>('/recommend/strategies').then(setData).finally(() => setLoading(false))
+    const run = async () => {
+      setLoading(true)
+      try {
+        const resp = await fetchApi<RecommendResp>('/recommend/strategies')
+        setData(resp)
+      } finally { setLoading(false) }
+    }
+    void run()
   }, [])
 
   const openExplain = async (r: Rec) => {

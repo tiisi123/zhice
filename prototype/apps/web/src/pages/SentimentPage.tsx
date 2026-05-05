@@ -148,14 +148,16 @@ export default function SentimentPage() {
   const [days, setDays] = useState(30)
 
   useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      fetchApi<{ data: SentimentRecord[] }>(`/market/sentiment-history?days=${days}`),
-      fetchApi<PhaseResp>('/market/sentiment-phase').catch(() => null),
-    ])
-      .then(([hist, ph]) => { setData(hist.data || []); setPhase(ph) })
-      .catch(() => setData([]))
-      .finally(() => setLoading(false))
+    void (async () => {
+      setLoading(true)
+      Promise.all([
+        fetchApi<{ data: SentimentRecord[] }>(`/market/sentiment-history?days=${days}`),
+        fetchApi<PhaseResp>('/market/sentiment-phase').catch(() => null),
+      ])
+        .then(([hist, ph]) => { setData(hist.data || []); setPhase(ph) })
+        .catch(() => setData([]))
+        .finally(() => setLoading(false))
+    })()
   }, [days])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />

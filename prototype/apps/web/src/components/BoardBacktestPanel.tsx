@@ -72,25 +72,27 @@ export default function BoardBacktestPanel() {
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    const params = new URLSearchParams({
-      sub_strategy: subStrategy,
-      mode,
-      years: String(years),
-    })
-    fetchApi<AnyData>(`/backtest/board-strategy?${params}`)
-      .then((res) => {
-        if (!active) return
-        setRaw(res)
-        setData(res?.data ?? null)
+    void (() => {
+      setLoading(true)
+      const params = new URLSearchParams({
+        sub_strategy: subStrategy,
+        mode,
+        years: String(years),
       })
-      .catch(() => {
-        if (active) {
-          setRaw(null)
-          setData(null)
-        }
-      })
-      .finally(() => { if (active) setLoading(false) })
+      fetchApi<AnyData>(`/backtest/board-strategy?${params}`)
+        .then((res) => {
+          if (!active) return
+          setRaw(res)
+          setData(res?.data ?? null)
+        })
+        .catch(() => {
+          if (active) {
+            setRaw(null)
+            setData(null)
+          }
+        })
+        .finally(() => { if (active) setLoading(false) })
+    })()
     return () => { active = false }
   }, [subStrategy, mode, years])
 

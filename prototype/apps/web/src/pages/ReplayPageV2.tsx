@@ -103,6 +103,29 @@ const SENT_TONE: Record<string, { act1: string; act3Mood: string }> = {
   '高潮': { act1: '龙王登基，全场狂欢', act3Mood: '盛宴尾声，警惕分歧' },
 }
 
+function ActCard({ icon, label, color, title, sub, foot }: {
+  icon: React.ReactNode; label: string; color: string; title: React.ReactNode; sub: React.ReactNode; foot?: React.ReactNode
+}) {
+  return (
+    <div style={{
+      flex: 1, minWidth: 0, background: '#fff', borderRadius: 12,
+      border: `1px solid ${color}22`, padding: '14px 16px', position: 'relative',
+      boxShadow: `0 2px 8px ${color}14`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{
+          width: 28, height: 28, borderRadius: 8, background: `${color}18`, color,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+        }}>{icon}</span>
+        <span style={{ fontSize: 12, color: '#999', letterSpacing: 1 }}>{label}</span>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 700, color: '#262626', lineHeight: 1.4, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 12, color: '#666', lineHeight: 1.6 }}>{sub}</div>
+      {foot && <div style={{ marginTop: 8 }}>{foot}</div>}
+    </div>
+  )
+}
+
 function SectionStoryline({
   summary, sectors, ladder, relay,
 }: {
@@ -159,26 +182,6 @@ function SectionStoryline({
 
   const aiPrompt = `把今日 A 股复盘讲成一段 80 字以内的故事：情绪【${summary.sentiment_level}】，涨停 ${lu} 家（较昨日${luDelta >= 0 ? '+' : ''}${luDelta}），最高 ${mb} 板${top1 ? `，主线【${top1.name}】强度 ${top1.intensity.toFixed(0)}` : ''}${topLeader ? `（龙头 ${(topLeader as LimitUpStock).stock_name} ${(topLeader as LimitUpStock).board_count}板）` : ''}${avgRelay !== null ? `，平均承接率 ${avgRelay.toFixed(0)}%` : ''}。要有画面感、不要罗列数字。`
 
-  const Act = ({ icon, label, color, title, sub, foot }: {
-    icon: React.ReactNode; label: string; color: string; title: React.ReactNode; sub: React.ReactNode; foot?: React.ReactNode
-  }) => (
-    <div style={{
-      flex: 1, minWidth: 0, background: '#fff', borderRadius: 12,
-      border: `1px solid ${color}22`, padding: '14px 16px', position: 'relative',
-      boxShadow: `0 2px 8px ${color}14`,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{
-          width: 28, height: 28, borderRadius: 8, background: `${color}18`, color,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
-        }}>{icon}</span>
-        <span style={{ fontSize: 12, color: '#999', letterSpacing: 1 }}>{label}</span>
-      </div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: '#262626', lineHeight: 1.4, marginBottom: 4 }}>{title}</div>
-      <div style={{ fontSize: 12, color: '#666', lineHeight: 1.6 }}>{sub}</div>
-      {foot && <div style={{ marginTop: 8 }}>{foot}</div>}
-    </div>
-  )
 
   return (
     <div style={{
@@ -195,7 +198,7 @@ function SectionStoryline({
         </Button>
       </div>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Act
+        <ActCard
           icon={<BulbOutlined />} label="ACT 1 · 开局" color="#1677ff"
           title={tone.act1}
           sub={<>涨停 <b style={{ color: '#f5222d' }}>{lu}</b> 家 · 最高 <b>{mb}</b> 板</>}
@@ -205,7 +208,7 @@ function SectionStoryline({
             </Tag>
           )}
         />
-        <Act
+        <ActCard
           icon={<FireOutlined />} label="ACT 2 · 主角" color="#fa541c"
           title={top1 ? top1.name : '主线尚未明确'}
           sub={top1 ? <>强度 <b>{top1.intensity.toFixed(0)}</b> · 板块涨幅 <b style={{ color: top1.change >= 0 ? '#f5222d' : '#52c41a' }}>{top1.change >= 0 ? '+' : ''}{top1.change.toFixed(2)}%</b></> : '资金分散，无明显合力'}
@@ -217,7 +220,7 @@ function SectionStoryline({
             </Link>
           )}
         />
-        <Act
+        <ActCard
           icon={<AimOutlined />} label="ACT 3 · 落幕 / 明日" color="#13c2c2"
           title={tone.act3Mood}
           sub={
@@ -719,12 +722,25 @@ function RotationScatter({ sectors }: { sectors: SectorRaw[] }) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (window_ === 1) { setMultiDay(null); return }
-    setLoading(true)
-    fetchApi<{ data: AnyData[] }>(`/market/rotation?window=${window_}`)
-      .then(r => setMultiDay(r.data || []))
-      .catch(() => setMultiDay([]))
-      .finally(() => setLoading(false))
+    if (window_ === 1) {
+      const reset = () => { setMultiDay(null) }
+      reset()
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi<{ data: AnyData[] }>(`/market/rotation?window=${window_}`)
+        if (!cancelled) setMultiDay(r.data || [])
+      } catch {
+        if (!cancelled) setMultiDay([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
   }, [window_])
 
   useEffect(() => {
@@ -1006,16 +1022,27 @@ function SectionCapitalFlow({ data, date }: { data: CapitalItem[] | null; date: 
   const [items, setItems] = useState<CapitalItem[] | null>(data)
   const [loading, setLoading] = useState(false)
 
-  // 当日数据由父组件传入；多周期时单独拉
-  useEffect(() => { if (window_ === 1) setItems(data) }, [data, window_])
   useEffect(() => {
-    if (window_ === 1) return
-    setLoading(true)
-    fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow?date=${date}&window=${window_}`)
-      .then(r => setItems(r.data || []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false))
-  }, [window_, date])
+    if (window_ === 1) {
+      const sync = () => { setItems(data) }
+      sync()
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow?date=${date}&window=${window_}`)
+        if (!cancelled) setItems(r.data || [])
+      } catch {
+        if (!cancelled) setItems([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [window_, date, data])
 
   useEffect(() => {
     if (!chartRef.current || !items || items.length === 0) return
@@ -1158,11 +1185,20 @@ function SectionTomorrow({ summary, ladder: _ladder, sectors, date }: {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
-    fetchApi<NextDayStrategy>(`/market/next-day-strategy?date=${date}`)
-      .then(setStrategy)
-      .catch(() => setStrategy(null))
-      .finally(() => setLoading(false))
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const r = await fetchApi<NextDayStrategy>(`/market/next-day-strategy?date=${date}`)
+        if (!cancelled) setStrategy(r)
+      } catch {
+        if (!cancelled) setStrategy(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
   }, [date])
 
   const top3Names = useMemo(() => sectors.slice(0, 3).map(pickName), [sectors])
@@ -1496,7 +1532,10 @@ export default function ReplayPageV2() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { loadData(selectedDate) }, [selectedDate, loadData])
+  useEffect(() => {
+    const run = async () => { await loadData(selectedDate) }
+    void run()
+  }, [selectedDate, loadData])
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '120px auto' }} />
   if (err) return <Alert type="error" showIcon message={err} />

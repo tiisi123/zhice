@@ -152,12 +152,18 @@ export default function ThemePage() {
   const [selectedDate, setSelectedDate] = useState<string | undefined>(undefined)
 
   useEffect(() => {
-    setLoading(true)
-    const params = selectedDate ? `?date=${selectedDate}` : ''
-    fetchApi<{ data: SectorItem[]; mock?: boolean }>(`/theme/sectors${params}`)
-      .then(res => { setSectors(res.data || []); setIsMock(!!res.mock) })
-      .catch(e => message.error((e as Error)?.message || '获取板块失败'))
-      .finally(() => setLoading(false))
+    const run = async () => {
+      setLoading(true)
+      const params = selectedDate ? `?date=${selectedDate}` : ''
+      try {
+        const res = await fetchApi<{ data: SectorItem[]; mock?: boolean }>(`/theme/sectors${params}`)
+        setSectors(res.data || [])
+        setIsMock(!!res.mock)
+      } catch (e) {
+        message.error((e as Error)?.message || '获取板块失败')
+      } finally { setLoading(false) }
+    }
+    void run()
   }, [selectedDate])
 
   const loadDetail = async (s: SectorItem) => {

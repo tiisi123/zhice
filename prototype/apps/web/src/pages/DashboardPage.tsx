@@ -43,10 +43,13 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    fetchApi<{ widgets: Widget[] }>('/dashboard/widgets')
-      .then((r) => setWidgets(r.widgets))
-      .catch((e: AnyData) => message.error((e as Error)?.message || '加载组件库失败'))
-    void refreshBoards()
+    const run = async () => {
+      fetchApi<{ widgets: Widget[] }>('/dashboard/widgets')
+        .then((r) => setWidgets(r.widgets))
+        .catch((e: AnyData) => message.error((e as Error)?.message || '加载组件库失败'))
+      await refreshBoards()
+    }
+    void run()
   }, [])
 
   const loadBoard = async (id: number) => {
