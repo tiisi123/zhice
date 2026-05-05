@@ -245,6 +245,37 @@ export interface TopTraderStock {
   t_seats: EnrichedSeat[]
 }
 
+// M004/S04 — board strategy backtest
+export interface BoardBacktestTradeEntry {
+  date: string
+  exit_date: string
+  stock: string
+  code: string
+  direction: string
+  hold_days: number
+  pnl: number
+  result: string
+}
+
+export interface BoardBacktestResult {
+  strategy_name: string
+  data_mode: string
+  data_source: string
+  total_return: number
+  annualized_return: number
+  max_drawdown: number
+  sharpe_ratio: number
+  win_rate: number
+  profit_loss_ratio: number
+  max_consecutive_loss: number
+  total_trades: number
+  win_trades: number
+  loss_trades: number
+  avg_hold_days: number
+  equity_curve: { date: string; value: number }[]
+  trade_log: BoardBacktestTradeEntry[]
+}
+
 export interface RegisterPayload {
   phone: string
   password: string

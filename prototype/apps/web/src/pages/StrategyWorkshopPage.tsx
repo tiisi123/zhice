@@ -1,7 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Tabs, Spin, Alert } from 'antd'
-import { ExperimentOutlined, BulbOutlined, BuildOutlined, ThunderboltOutlined, ControlOutlined, LineChartOutlined } from '@ant-design/icons'
+import { ExperimentOutlined, BulbOutlined, BuildOutlined, ThunderboltOutlined, ControlOutlined, LineChartOutlined, FundOutlined } from '@ant-design/icons'
 import AIBadge from '../components/AIBadge'
 
 const RecommendPage = lazy(() => import('./RecommendPage'))
@@ -9,6 +9,7 @@ const StrategyBuilderPage = lazy(() => import('./StrategyBuilderPage'))
 const StrategyPage = lazy(() => import('./StrategyPage'))
 const AdvancedStrategyPage = lazy(() => import('./AdvancedStrategyPage'))
 const LabPage = lazy(() => import('./LabPage'))
+const BoardBacktestPanel = lazy(() => import('../components/BoardBacktestPanel'))
 const fallback = <div style={{ padding: 48, textAlign: 'center' }}><Spin size="large" /></div>
 
 export default function StrategyWorkshopPage() {
@@ -39,6 +40,7 @@ export default function StrategyWorkshopPage() {
           { key: 'backtest', label: <span><LineChartOutlined /> 回测体检</span>, children: <Suspense fallback={fallback}><StrategyPage /></Suspense> },
           { key: 'advanced', label: <span><ThunderboltOutlined /> 参数优化</span>, children: <Suspense fallback={fallback}><AdvancedStrategyPage /></Suspense> },
           { key: 'simulate', label: <span><LineChartOutlined /> 模拟组合</span>, children: <Suspense fallback={fallback}><AdvancedStrategyPage /></Suspense> },
+          { key: 'board-backtest', label: <span><FundOutlined /> 打板回测</span>, children: <Suspense fallback={fallback}><BoardBacktestPanel /></Suspense> },
           { key: 'lab', label: <span><ControlOutlined /> 实验室</span>, children: <Suspense fallback={fallback}><LabPage /></Suspense> },
         ]}
       />
