@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Card, Tabs, Form, Select, Button, Spin, Empty, Typography, Space, Tag } from 'antd'
-import { RobotOutlined, ThunderboltOutlined, FundOutlined } from '@ant-design/icons'
-import { postApi } from '../api/client'
+import { Card, Collapse, Descriptions, Tabs, Form, Select, Button, Spin, Empty, Typography, Space, Statistic, Tag } from 'antd'
+import { RobotOutlined, ThunderboltOutlined, FundOutlined, DatabaseOutlined } from '@ant-design/icons'
+import { fetchApi, postApi } from '../api/client'
 import { extractMeta } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
 import AIDisclaimer from '../components/AIDisclaimer'
@@ -12,6 +12,7 @@ import type {
   EtfRotationInput,
   EtfRotationAdvice,
   ContractEnvelope,
+  DataStatus,
   AnyData,
 } from '../api/types'
 
@@ -69,6 +70,51 @@ function AdviceDisplay({ advice, meta }: { advice: string; meta: ReturnType<type
   )
 }
 
+function BoardDataContext() {
+  const [ctx, setCtx] = useState<AnyData>(null)
+  const [loading, setLoading] = useState(false)
+  const [fetched, setFetched] = useState(false)
+
+  const handleExpand = (keys: string | string[]) => {
+    if ((Array.isArray(keys) ? keys.length : keys) && !fetched) {
+      setLoading(true)
+      setFetched(true)
+      fetchApi<AnyData>('/analysis/board-replay')
+        .then(setCtx)
+        .catch(() => setCtx(null))
+        .finally(() => setLoading(false))
+    }
+  }
+
+  const replay = ctx?.data
+  const ctxMeta = extractMeta(ctx, '打板数据上下文')
+
+  return (
+    <Collapse
+      size="small"
+      style={{ marginBottom: 16 }}
+      onChange={handleExpand}
+      items={[{
+        key: 'board-ctx',
+        label: <Space><DatabaseOutlined />数据上下文 (展开加载)</Space>,
+        children: loading ? <Spin size="small" /> : !replay ? (
+          <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          <div>
+            <DataStatusBadge status={ctxMeta.data_status as DataStatus} source={ctxMeta.source} mock={ctxMeta.mock} size="small" />
+            <Descriptions size="small" column={4} style={{ marginTop: 8 }}>
+              <Descriptions.Item label="首板">{replay.first_board?.length ?? 0}</Descriptions.Item>
+              <Descriptions.Item label="连板">{replay.consecutive?.length ?? 0}</Descriptions.Item>
+              <Descriptions.Item label="炸板">{replay.broken?.length ?? 0}</Descriptions.Item>
+              <Descriptions.Item label="日期">{ctx.trade_date ?? '-'}</Descriptions.Item>
+            </Descriptions>
+          </div>
+        ),
+      }]}
+    />
+  )
+}
+
 function BoardTradingPanel() {
   const [form] = Form.useForm<BoardTradingInput>()
   const [loading, setLoading] = useState(false)
@@ -121,6 +167,8 @@ function BoardTradingPanel() {
         </Form>
       </Card>
 
+      <BoardDataContext />
+
       {loading && <Spin size="large" style={{ display: 'block', margin: '40px auto' }} />}
 
       {error && (
@@ -135,6 +183,56 @@ function BoardTradingPanel() {
         </Card>
       )}
     </div>
+  )
+}
+
+function EtfDataContext() {
+  const [ctx, setCtx] = useState<AnyData>(null)
+  const [loading, setLoading] = useState(false)
+  const [fetched, setFetched] = useState(false)
+
+  const handleExpand = (keys: string | string[]) => {
+    if ((Array.isArray(keys) ? keys.length : keys) && !fetched) {
+      setLoading(true)
+      setFetched(true)
+      fetchApi<AnyData>('/etf/rotation/dashboard')
+        .then(setCtx)
+        .catch(() => setCtx(null))
+        .finally(() => setLoading(false))
+    }
+  }
+
+  const dashboard = ctx?.data
+  const ctxMeta = extractMeta(ctx, 'ETF轮动上下文')
+
+  return (
+    <Collapse
+      size="small"
+      style={{ marginBottom: 16 }}
+      onChange={handleExpand}
+      items={[{
+        key: 'etf-ctx',
+        label: <Space><DatabaseOutlined />数据上下文 (展开加载)</Space>,
+        children: loading ? <Spin size="small" /> : !dashboard ? (
+          <Empty description="暂无数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          <div>
+            <DataStatusBadge status={ctxMeta.data_status as DataStatus} source={ctxMeta.source} mock={ctxMeta.mock} size="small" />
+            <Space wrap style={{ marginTop: 8 }}>
+              {dashboard.current_signal && (
+                <Statistic title="当前信号" value={dashboard.current_signal} valueStyle={{ fontSize: 14 }} />
+              )}
+              {dashboard.etf_count != null && (
+                <Statistic title="ETF数量" value={dashboard.etf_count} valueStyle={{ fontSize: 14 }} />
+              )}
+              {dashboard.data_mode && (
+                <Tag color={dashboard.data_mode === 'live' ? 'green' : 'orange'}>{dashboard.data_mode}</Tag>
+              )}
+            </Space>
+          </div>
+        ),
+      }]}
+    />
   )
 }
 
@@ -189,6 +287,8 @@ function EtfRotationPanel() {
           </Form.Item>
         </Form>
       </Card>
+
+      <EtfDataContext />
 
       {loading && <Spin size="large" style={{ display: 'block', margin: '40px auto' }} />}
 
