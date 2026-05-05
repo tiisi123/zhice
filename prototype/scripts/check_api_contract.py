@@ -25,6 +25,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -61,7 +62,8 @@ def get_json(path: str, token: str | None = None) -> tuple[int, dict | None, str
     headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    req = Request(f"{API_BASE}{path}", method="GET", headers=headers)
+    encoded_path = quote(path, safe="/:?=&%")
+    req = Request(f"{API_BASE}{encoded_path}", method="GET", headers=headers)
     try:
         with urlopen(req, timeout=15) as res:
             text = res.read().decode("utf-8", errors="replace")
