@@ -70,5 +70,13 @@
     "seal_success_rate": 84.95,
     "max_board": 4,
     "sentiment_level": "回暖"
+  },
+  "2026-05-05": {
+    "limit_up_count": 79,
+    "broken_count": 14,
+    "broken_rate": 15.05,
+    "seal_success_rate": 84.95,
+    "max_board": 4,
+    "sentiment_level": "回暖"
   }
 }

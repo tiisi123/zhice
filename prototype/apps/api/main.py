@@ -23,6 +23,7 @@ from .routes import (
     chain,
     analysis,
     board_replay,
+    top_traders,
     growth,
     value,
     advanced_strategy,
@@ -130,6 +131,7 @@ app.include_router(strategy.router, prefix="/api/strategy", tags=["strategy"])
 app.include_router(chain.router, prefix="/api/chain", tags=["chain"])
 app.include_router(analysis.router, prefix="/api/analysis", tags=["analysis"])
 app.include_router(board_replay.router, prefix="/api/analysis", tags=["board-replay"])
+app.include_router(top_traders.router, prefix="/api/analysis", tags=["top-traders"])
 app.include_router(growth.router, prefix="/api/growth", tags=["growth"])
 app.include_router(value.router, prefix="/api/value", tags=["value"])
 app.include_router(advanced_strategy.router, prefix="/api/advanced-strategy", tags=["advanced-strategy"])

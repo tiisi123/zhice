@@ -53,6 +53,34 @@ def build_seat_rank(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def build_top_traders(stocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """龙虎榜股票列表，席位字符串 → {name, famous_alias} enriched dicts。
+
+    按 abs(net_amount) 降序排列。
+    """
+    result = []
+    for s in stocks:
+        result.append({
+            "stock_code": s.get("stock_code", ""),
+            "stock_name": s.get("stock_name", ""),
+            "change_rate": s.get("change_rate", 0.0),
+            "net_amount": s.get("net_amount", 0.0),
+            "amount": s.get("amount", 0.0),
+            "float_mv": s.get("float_mv", 0.0),
+            "turnover_ratio": s.get("turnover_ratio", 0.0),
+            "concepts": s.get("concepts", []),
+            "buy_seats": [_enrich_seat(name) for name in (s.get("buy_seats") or [])],
+            "sell_seats": [_enrich_seat(name) for name in (s.get("sell_seats") or [])],
+            "t_seats": [_enrich_seat(name) for name in (s.get("t_seats") or [])],
+        })
+    result.sort(key=lambda x: abs(x.get("net_amount", 0)), reverse=True)
+    return result
+
+
+def _enrich_seat(name: str) -> dict[str, str | None]:
+    return {"name": name, "famous_alias": _match_famous(name)}
+
+
 def _match_famous(seat: str) -> str | None:
     for alias, candidates in FAMOUS_SEATS.items():
         for c in candidates:

@@ -59,6 +59,7 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     # ── /api/analysis/*
     ("/api/analysis/broken-cases", "kpl"),
     ("/api/analysis/board-replay", "kpl"),
+    ("/api/analysis/top-traders", "kpl_longhu_bang"),
     # ── /api/research/*
     ("/api/research/announcements", "sample_research_announcements"),
     ("/api/research/alt-data", "sample_research_alt_data"),
