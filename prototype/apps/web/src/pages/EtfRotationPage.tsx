@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Card, Col, Row, Select, Space, Spin, Statistic, Table, Tabs, Tag } from 'antd'
 import * as echarts from 'echarts'
 import { fetchApi } from '../api/client'
@@ -6,6 +6,8 @@ import AIBadge from '../components/AIBadge'
 import type { AnyData, DataStatus } from '../api/types'
 import { extractMeta } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
+
+const EtfBacktestPanel = lazy(() => import('../components/EtfBacktestPanel'))
 
 type StageType = '加速' | '启动' | '蓄势' | '分歧' | '退潮'
 
@@ -325,6 +327,10 @@ export default function EtfRotationPage() {
               {
                 key: 'heatmap', label: '启动阶段热力',
                 children: <div ref={heatmapRef} style={{ width: '100%', height: 420 }} />,
+              },
+              {
+                key: 'backtest', label: '策略回测',
+                children: <Suspense fallback={<Spin />}><EtfBacktestPanel /></Suspense>,
               },
             ]} />
           </Card>

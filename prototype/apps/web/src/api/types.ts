@@ -245,6 +245,27 @@ export interface TopTraderStock {
   t_seats: EnrichedSeat[]
 }
 
+// M004/S03 — ETF rotation backtest
+export interface EtfRebalanceAllocation {
+  code: string
+  name: string
+  weight: number
+}
+
+export interface EtfBacktestResult {
+  strategy_name: string
+  data_mode: string
+  data_source: string
+  total_return: number
+  annualized_return: number
+  max_drawdown: number
+  sharpe_ratio: number
+  total_trades: number
+  equity_curve: { day: number; value: number }[]
+  rebalance_log: { day: number; allocations: EtfRebalanceAllocation[] }[]
+  etf_count: number
+}
+
 // M004/S04 — board strategy backtest
 export interface BoardBacktestTradeEntry {
   date: string
