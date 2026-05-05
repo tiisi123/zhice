@@ -9,6 +9,7 @@ import {
   BuildOutlined,
   EyeOutlined,
   FireOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons'
 import AICopilot from '../components/AICopilot'
 import UserMenu from '../components/UserMenu'
@@ -25,6 +26,7 @@ const menuItems = [
   ]},
   { key: 'hot', label: '热点', type: 'group' as const, children: [
     { key: '/theme-workshop', icon: <FireOutlined />, label: '题材工坊' },
+    { key: '/event-chain', icon: <ApartmentOutlined />, label: '事件链' },
     { key: '/verification', icon: <WarningOutlined />, label: '验证中心' },
   ]},
   { key: 'growth', label: '成长', type: 'group' as const, children: [

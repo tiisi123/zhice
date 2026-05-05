@@ -245,6 +245,21 @@ export interface TopTraderStock {
   t_seats: EnrichedSeat[]
 }
 
+// M004/S02 — event chain
+export interface EventChainData {
+  keyword: string
+  chain_name: string
+  matched_chain: {
+    upstream: string[]
+    midstream: string[]
+    downstream: string[]
+  }
+  transmission_logic: string
+  transmission_lag: string
+  kpl_enrichment: AnyData[]
+  llm_analysis: string
+}
+
 // M004/S03 — ETF rotation backtest
 export interface EtfRebalanceAllocation {
   code: string
