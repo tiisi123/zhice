@@ -63,11 +63,13 @@ class LLMClient:
 
     def _call_openai_compatible(self, prompt: str, base_url: str, api_key: str, model: str) -> str:
         base = base_url.rstrip("/")
-        resp = self._client.post(
+        with self._client.stream(
+            "POST",
             f"{base}/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
             },
             json={
                 "model": model,
@@ -75,9 +77,40 @@ class LLMClient:
                 "temperature": 0.3,
                 "max_tokens": 2000,
             },
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
+        ) as resp:
+            resp.raise_for_status()
+            content_type = resp.headers.get("content-type", "")
+            if "text/event-stream" in content_type:
+                return self._read_sse_chat_completion(resp)
+            payload = json.loads(resp.read().decode("utf-8"))
+            return payload["choices"][0]["message"]["content"]
+
+    def _read_sse_chat_completion(self, resp: httpx.Response) -> str:
+        parts: list[str] = []
+        try:
+            for raw_line in resp.iter_lines():
+                line = raw_line.strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if not payload or payload == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(payload)
+                except json.JSONDecodeError:
+                    continue
+                for choice in chunk.get("choices", []):
+                    delta = choice.get("delta") or {}
+                    content = delta.get("content")
+                    if content:
+                        parts.append(str(content))
+        except httpx.HTTPError:
+            if parts:
+                return "".join(parts)
+            raise
+        if parts:
+            return "".join(parts)
+        raise ValueError("SSE chat completion contained no content")
 
     def _call_deepseek(self, prompt: str, model: str) -> str:
         return self._call_openai_compatible(prompt, settings.deepseek_base_url, settings.deepseek_api_key, model)
