@@ -59,9 +59,9 @@ PLAN
 done
 
 echo "Running gsd recover..."
-gsd recover
+gsd headless --timeout 60000 recover
 
-echo "Running gsd doctor..."
-gsd doctor
+echo "Running gsd query..."
+gsd headless --timeout 60000 query --output-format json
 
 echo "== Recovery complete =="

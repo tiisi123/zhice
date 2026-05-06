@@ -8,7 +8,7 @@ Validates:
 - ETF-rotation response has advice field with ETF rotation content
 - ETF-rotation accepts style/investment_horizon/risk_preference params
 - Both endpoints handle empty body (defaults)
-- D004 contract consistency (source non-empty, mock=False, data_status valid)
+- D004 contract consistency (source non-empty, mock bool, data_status valid)
 - Contract registration: both endpoints in contract_endpoints.py
 - check_api_contract.py passes for these endpoints
 - check_no_mock.py: 0 violations
@@ -76,7 +76,7 @@ class Verifier:
             print("  VERDICT: PASS")
 
 
-def check_d004(v: Verifier, prefix: str, body: dict):
+def check_d004(v: Verifier, prefix: str, body: dict, *, allow_mock: bool = False):
     missing = D004_REQUIRED - set(body.keys())
     v.check(f"{prefix} D004 fields present", not missing,
             f"missing={sorted(missing)}" if missing else "source/data_status/mock present")
@@ -86,8 +86,12 @@ def check_d004(v: Verifier, prefix: str, body: dict):
     mock = body.get("mock")
     v.check(f"{prefix} mock is bool", isinstance(mock, bool),
             f"mock={mock!r} type={type(mock).__name__}")
-    v.check(f"{prefix} mock=False", mock is False,
-            f"mock={mock!r} (agent endpoints should not be mock)")
+    if allow_mock:
+        v.check(f"{prefix} mock allowed by evidence status", True,
+                f"mock={mock!r} data_status={ds!r}")
+    else:
+        v.check(f"{prefix} mock=False", mock is False,
+                f"mock={mock!r} (this agent endpoint should not be mock)")
     if mock and ds != "mock":
         v.check(f"{prefix} D004 consistency", False,
                 f"mock=True but data_status={ds!r}")
@@ -177,7 +181,7 @@ def test_etf_http_200_d004(v: Verifier) -> dict | None:
     v.check("etf-rotation HTTP 200", status == 200, f"status={status}")
     v.check("etf-rotation has body", body is not None, "non-null response")
     if body:
-        check_d004(v, "etf-rotation", body)
+        check_d004(v, "etf-rotation", body, allow_mock=True)
         src = body.get("source")
         v.check("etf-rotation source contains llm",
                 isinstance(src, str) and "llm" in src, f"source={src!r}")

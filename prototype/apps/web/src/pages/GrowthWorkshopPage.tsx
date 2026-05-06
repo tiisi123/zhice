@@ -12,7 +12,9 @@ import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
 import AIBadge from '../components/AIBadge'
 import MockBanner from '../components/MockBanner'
-import type { AnyData } from '../api/types'
+import type { AnyData, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 const ProsperityPage = lazy(() => import('./ProsperityPage'))
 const EtfRotationPage = lazy(() => import('./EtfRotationPage'))
@@ -158,8 +160,8 @@ export default function GrowthWorkshopPage() {
         setIndustries(p.industries || [])
         setIsMock(Boolean((m as AnyData).mock || (p as AnyData).mock || m.indicators?.some((i: AnyData) => i.data_source === 'mock')))
         setDataStatus([
-          { label: '宏观', source: (m as AnyData).source, data_status: (m as AnyData).data_status, message: (m as AnyData).message },
-          { label: '景气', source: (p as AnyData).source, data_status: (p as AnyData).data_status, message: (p as AnyData).message },
+          { label: '宏观', ...extractMeta(m) },
+          { label: '景气', ...extractMeta(p) },
         ])
       }).finally(() => setLoading(false))
     })()
@@ -191,7 +193,17 @@ export default function GrowthWorkshopPage() {
           showIcon
           style={{ marginBottom: 12 }}
           message="数据状态"
-          description={dataStatus.map(s => `${s.label}: ${s.source || 'unknown'} / ${s.data_status || 'unknown'}${s.message ? `（${s.message}）` : ''}`).join('；')}
+          description={
+            <Space size={[8, 8]} wrap>
+              {dataStatus.map(s => (
+                <Space key={s.label} size={6}>
+                  <span>{s.label}</span>
+                  <DataStatusBadge status={s.data_status as DataStatus} source={s.source} mock={s.mock} size="small" />
+                  {s.message && <span style={{ color: '#666' }}>{s.message}</span>}
+                </Space>
+              ))}
+            </Space>
+          }
         />
       )}
 

@@ -22,27 +22,47 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _status_from_modes(items: list[dict], *, sample_source: str, real_source: str) -> tuple[str, str, bool, str, str, str]:
+    if not items:
+        return real_source, "empty", False, "", "empty", ""
+
+    modes = {str(item.get("data_mode") or "") for item in items}
+    as_of = max((str(item.get("as_of") or item.get("date") or "") for item in items), default="")
+    reasons = sorted({str(item.get("fallback_reason") or "") for item in items if item.get("fallback_reason")})
+
+    if modes and modes <= {"sample"}:
+        return sample_source, "mock", True, "当前为静态样例，真实数据源不可用或未返回有效数据", "sample", reasons[0] if reasons else ""
+    if "live" in modes and modes <= {"live"}:
+        return real_source, "real", False, "", "live", ""
+    if "live" in modes:
+        reason = reasons[0] if reasons else "partial_static_reference"
+        return f"{real_source}+static_reference", "fallback", False, "部分指标来自静态参考值，请结合来源标识使用", "hybrid", reason
+    if "static" in modes:
+        reason = reasons[0] if reasons else "static_reference_only"
+        return sample_source, "fallback", False, "当前为静态参考值，未完全接入实时源", "static", reason
+    return sample_source, "mock", True, "当前为静态样例，真实数据源不可用或未返回有效数据", "sample", reasons[0] if reasons else ""
+
+
 @router.get("/macro")
 def macro_panel():
     try:
         indicators = get_macro_indicators()
-        has_real = any(item.get("data_source") == "tushare" for item in indicators)
-        all_mock = all(item.get("data_source") == "mock" for item in indicators)
-        if all_mock:
-            source, status, mock = "static_macro_sample", "mock", True
-            message = "TuShare 不可用，当前为静态宏观样例"
-        elif has_real:
-            source, status, mock = "tushare", "real", False
-            message = ""
-        else:
-            source, status, mock = "static_macro_sample", "empty", False
-            message = ""
+        source, status, mock, message, data_mode, fallback_reason = _status_from_modes(
+            indicators,
+            sample_source="static_macro_sample",
+            real_source="tushare_macro",
+        )
+        as_of = max((str(item.get("as_of") or item.get("date") or "") for item in indicators), default="")
         return wrap_contract(
             indicators,
             source=source,
             status=status,
             mock=mock,
             message=message,
+            data_source=source,
+            data_mode=data_mode,
+            as_of=as_of,
+            fallback_reason=fallback_reason,
             indicators=indicators,
         )
     except Exception as e:
@@ -53,19 +73,22 @@ def macro_panel():
 def prosperity_heatmap():
     try:
         data = get_industry_prosperity()
-        has_real = any(item.get("data_source") == "tushare" for item in data)
-        if has_real:
-            source, status, mock = "tushare+sw_index", "real", False
-            message = ""
-        else:
-            source, status, mock = "static_industry_prosperity", "mock", True
-            message = "行业景气度为静态样例，真实中观数据待接入"
+        source, status, mock, message, data_mode, fallback_reason = _status_from_modes(
+            data,
+            sample_source="static_industry_prosperity",
+            real_source="tushare_sw_daily",
+        )
+        as_of = max((str(item.get("as_of") or "") for item in data), default="")
         return wrap_contract(
             data,
             source=source,
-            status=status if data else "empty",
+            status=status,
             mock=mock,
             message=message,
+            data_source=source,
+            data_mode=data_mode,
+            as_of=as_of,
+            fallback_reason=fallback_reason,
             industries=data,
             count=len(data),
         )
@@ -78,19 +101,22 @@ def prosperity_compare(names: str = Query("半导体,AI/算力,新能源车")):
     try:
         name_list = [n.strip() for n in names.split(",")]
         compared = compare_industries(name_list)
-        has_real = any(item.get("data_source") == "tushare" for item in compared)
-        if has_real:
-            source, status, mock = "tushare+sw_index", "real", False
-            message = ""
-        else:
-            source, status, mock = "static_industry_prosperity", "mock", True
-            message = "基于静态行业景气矩阵过滤"
+        source, status, mock, message, data_mode, fallback_reason = _status_from_modes(
+            compared,
+            sample_source="static_industry_prosperity",
+            real_source="tushare_sw_daily",
+        )
+        as_of = max((str(item.get("as_of") or "") for item in compared), default="")
         return wrap_contract(
             compared,
             source=source,
-            status=status if compared else "empty",
+            status=status,
             mock=mock,
             message=message,
+            data_source=source,
+            data_mode=data_mode,
+            as_of=as_of,
+            fallback_reason=fallback_reason,
             compared=compared,
         )
     except Exception as e:

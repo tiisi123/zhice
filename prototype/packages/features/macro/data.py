@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,27 @@ SAMPLE_PORTFOLIO: list[dict] = [
 ]
 
 
+def _format_month(raw_date: Any) -> str:
+    text = str(raw_date or "")
+    return f"{text[:4]}-{text[4:6]}" if len(text) >= 6 else text
+
+
+def _format_trade_date(raw_date: Any) -> str:
+    text = str(raw_date or "")
+    return f"{text[:4]}-{text[4:6]}-{text[6:8]}" if len(text) >= 8 else text
+
+
+def _static_macro_item(item: dict, *, source: str, mode: str, reason: str) -> dict:
+    copied = dict(item)
+    copied.update({
+        "data_source": source,
+        "data_mode": mode,
+        "as_of": copied.get("date", ""),
+        "fallback_reason": reason,
+    })
+    return copied
+
+
 def get_macro_indicators() -> list[dict]:
     """优先从 TuShare 拉取宏观指标，失败时回退到静态数据。"""
     try:
@@ -58,7 +80,15 @@ def get_macro_indicators() -> list[dict]:
                 return real
     except Exception:
         logger.debug("fetch real macro failed, using mock data")
-    return [dict(m, data_source="mock") for m in MACRO_INDICATORS]
+    return [
+        _static_macro_item(
+            m,
+            source="static_macro_sample",
+            mode="sample",
+            reason="tushare_unavailable_or_empty",
+        )
+        for m in MACRO_INDICATORS
+    ]
 
 
 _MACRO_API_MAP: list[tuple[str, str, str, str, str]] = [
@@ -90,12 +120,15 @@ def _fetch_real_macro(ts) -> list[dict]:
                 val = round(val / 10000, 2)
                 prev_val = round(prev_val / 10000, 2)
             direction = "up" if val > prev_val else "down" if val < prev_val else "flat"
-            raw_date = str(latest.get(date_field, ""))
+            as_of = _format_month(latest.get(date_field, ""))
             indicators.append({
                 "name": name, "value": val, "prev": prev_val,
                 "unit": unit, "direction": direction,
-                "date": f"{raw_date[:4]}-{raw_date[4:6]}" if len(raw_date) >= 6 else raw_date,
-                "data_source": "tushare",
+                "date": as_of,
+                "data_source": f"tushare_{api}",
+                "data_mode": "live",
+                "as_of": as_of,
+                "fallback_reason": "",
             })
         except Exception:
             continue
@@ -107,7 +140,14 @@ def _append_static_rates(indicators: list[dict]) -> None:
     """LPR 和汇率 TuShare 未开放，保留静态值但标记来源。"""
     for item in MACRO_INDICATORS:
         if item["name"] in ("LPR-1Y", "LPR-5Y", "美元兑人民币"):
-            indicators.append(dict(item, data_source="static"))
+            indicators.append(
+                _static_macro_item(
+                    item,
+                    source="static_macro_reference",
+                    mode="static",
+                    reason="indicator_not_available_in_current_tushare_adapter",
+                )
+            )
 
 
 def get_industry_prosperity() -> list[dict]:
@@ -121,7 +161,16 @@ def get_industry_prosperity() -> list[dict]:
                 return real
     except Exception:
         logger.debug("fetch real prosperity failed, using static data")
-    return [dict(i, data_source="mock") for i in INDUSTRY_PROSPERITY]
+    return [
+        dict(
+            i,
+            data_source="static_industry_prosperity",
+            data_mode="sample",
+            as_of="",
+            fallback_reason="tushare_unavailable_or_empty",
+        )
+        for i in INDUSTRY_PROSPERITY
+    ]
 
 
 _QUARTER_BOUNDARIES = [
@@ -220,7 +269,10 @@ def _fetch_real_prosperity(ts) -> list[dict]:
             "pe": round(float(latest.get("pe") or 0), 1),
             "pb": round(float(latest.get("pb") or 0), 2),
             "pct_change": round(float(latest.get("pct_change") or 0), 2),
-            "data_source": "tushare",
+            "data_source": "tushare_sw_daily",
+            "data_mode": "live",
+            "as_of": _format_trade_date(latest.get("trade_date", "")),
+            "fallback_reason": "",
         })
 
     result.sort(key=lambda x: x.get("q4", 0) if x.get("q4", 0) != 50 else x.get("q3", 0), reverse=True)

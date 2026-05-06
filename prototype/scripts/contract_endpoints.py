@@ -97,7 +97,7 @@ CONTRACT_ENDPOINTS: list[tuple[str, str]] = [
     ("/api/ai/headline", ""),
     ("/api/ai/replay-report", ""),
     ("/api/ai/agent/board-trading", ""),   # POST; source varies: kpl+llm or llm_mock
-    ("/api/ai/agent/etf-rotation", ""),    # POST; source varies: sample_engine+llm or llm_mock
+    ("/api/ai/agent/etf-rotation", ""),    # POST; source varies: tushare_fund_daily+llm, sample_engine+llm, llm_mock
     # ── /api/etf/* （source 来自 data.data_source，CI 默认 sample_engine）
     ("/api/etf/rotation/dashboard", ""),
     ("/api/etf/rotation-signals", ""),

@@ -11,7 +11,9 @@ import { askAI } from '../api/copilot'
 import { AskAIChip } from '../components/smart'
 import AIDisclaimer from '../components/AIDisclaimer'
 import AIBadge from '../components/AIBadge'
-import type { AnyData } from '../api/types'
+import type { AnyData, DataStatus } from '../api/types'
+import { extractMeta } from '../api/useApiMeta'
+import DataStatusBadge from '../components/DataStatusBadge'
 
 const ValuePage = lazy(() => import('./ValuePage'))
 const ValuationPage = lazy(() => import('./ValuationPage'))
@@ -28,6 +30,8 @@ const DEFAULT_VALUE_STOCKS = [
   { code: '601088', name: '中国神华', tag: '红利/资源', industry: '煤炭' },
 ]
 
+const DEGRADED_STATUSES = new Set<DataStatus>(['mock', 'fallback', 'unavailable', 'empty', 'error'])
+
 // ========== 公司质量雷达图 ==========
 function QualityRadar({ code }: { code: string }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -39,7 +43,7 @@ function QualityRadar({ code }: { code: string }) {
     fetchApi<AnyData>(`/value/financial/${code}`)
       .then((r) => {
         setData(r.data || null)
-        setStatus({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message })
+        setStatus(extractMeta(r))
       })
       .catch(() => { setData(null); setStatus(null) })
   }, [code])
@@ -76,12 +80,17 @@ function QualityRadar({ code }: { code: string }) {
 
   return (
     <div>
-      {status && (status.mock || status.data_status !== 'ok') && (
+      {status && DEGRADED_STATUSES.has(status.data_status as DataStatus) && (
         <Alert
           type={status.mock ? 'warning' : 'info'}
           showIcon
           style={{ marginBottom: 8 }}
-          message={`基本面数据：${status.source || 'unknown'} / ${status.data_status || 'unknown'}`}
+          message={
+            <Space size={8}>
+              <span>基本面数据</span>
+              <DataStatusBadge status={status.data_status as DataStatus} source={status.source} mock={status.mock} size="small" />
+            </Space>
+          }
           description={status.message || '该模块使用接口返回的数据状态生成图表。'}
         />
       )}
@@ -107,7 +116,7 @@ function ValuationBrief({ code }: { code: string }) {
     fetchApi<AnyData>(`/value/financial/${code}`)
       .then((r) => {
         setData(r.data || null)
-        setStatus({ source: r.source, data_status: r.data_status, mock: r.mock, message: r.message })
+        setStatus(extractMeta(r))
       }).catch(() => { setData(null); setStatus(null) })
   }, [code])
 
@@ -120,12 +129,17 @@ function ValuationBrief({ code }: { code: string }) {
 
   return (
     <div>
-      {status && (status.mock || status.data_status !== 'ok' || status.source === 'tushare') && (
+      {status && (DEGRADED_STATUSES.has(status.data_status as DataStatus) || status.source === 'tushare') && (
         <Alert
           type={status.mock ? 'warning' : 'info'}
           showIcon
           style={{ marginBottom: 8 }}
-          message={`估值数据：${status.source || 'unknown'} / ${status.data_status || 'unknown'}`}
+          message={
+            <Space size={8}>
+              <span>估值数据</span>
+              <DataStatusBadge status={status.data_status as DataStatus} source={status.source} mock={status.mock} size="small" />
+            </Space>
+          }
           description={status.source === 'tushare'
             ? 'PE/PB 历史分位暂未接历史估值序列，当前为参考占位口径，不可作为真实历史分位结论。'
             : (status.message || 'PE/PB 分位当前依赖后端口径。')}

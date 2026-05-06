@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
@@ -503,40 +503,128 @@ class EtfRotationInput(BaseModel):
     risk_preference: str = "中等"
 
 
+_ETF_AGENT_MODE_TO_D004: dict[str, tuple[str, bool]] = {
+    "live": ("real", False),
+    "cache": ("real", False),
+    "hybrid": ("fallback", False),
+    "sample": ("mock", True),
+    "unavailable": ("unavailable", False),
+}
+
+
+def _etf_agent_evidence_meta(payload: dict[str, Any] | None, *, count_key: str) -> dict[str, Any]:
+    if not payload:
+        return {
+            "data_mode": "unavailable",
+            "data_source": "unknown",
+            "data_status": "unavailable",
+            "mock": False,
+            count_key: 0,
+        }
+
+    mode = str(payload.get("data_mode") or "sample")
+    status, mock_flag = _ETF_AGENT_MODE_TO_D004.get(mode, ("fallback", False))
+    meta = {
+        "data_mode": mode,
+        "data_source": str(payload.get("data_source") or "unknown"),
+        "data_status": status,
+        "mock": mock_flag,
+        count_key: len(payload.get(count_key, []) or []),
+    }
+    if payload.get("as_of"):
+        meta["as_of"] = payload.get("as_of")
+    return meta
+
+
+def _aggregate_etf_agent_evidence(evidence: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    modes = [str(item.get("data_mode") or "unavailable") for item in evidence.values()]
+    sources = [
+        str(item.get("data_source"))
+        for item in evidence.values()
+        if item.get("data_source") and item.get("data_source") != "unknown"
+    ]
+    source = "+".join(dict.fromkeys([*sources, "llm"])) or "llm"
+
+    if modes and all(mode in {"live", "cache"} for mode in modes):
+        return {"data_status": "real", "mock": False, "data_mode": "live", "source": source, "message": ""}
+    if modes and all(mode == "sample" for mode in modes):
+        return {
+            "data_status": "mock",
+            "mock": _ETF_AGENT_MODE_TO_D004["sample"][1],
+            "data_mode": "sample",
+            "source": source,
+            "message": "ETF轮动信号和回测均为演示数据，AI建议仅供流程验证，不代表真实市场结论。",
+        }
+    if modes and all(mode == "unavailable" for mode in modes):
+        return {
+            "data_status": "unavailable",
+            "mock": False,
+            "data_mode": "unavailable",
+            "source": source,
+            "message": "ETF轮动信号和回测数据均不可用，无法形成可靠建议。",
+        }
+    return {
+        "data_status": "fallback",
+        "mock": False,
+        "data_mode": "hybrid",
+        "source": source,
+        "message": "ETF轮动证据包含降级或样例数据，已在 evidence 中标明来源。",
+    }
+
+
 @router.post("/agent/etf-rotation")
 def agent_etf_rotation(inp: EtfRotationInput):
     user_style = (f"风格: {inp.style}\n投资期限: {inp.investment_horizon}"
                   f"\n风险偏好: {inp.risk_preference}")
     try:
-        data_source = "sample_engine+llm"
+        signals_result: dict[str, Any] | None = None
         signals_data: list[dict] = []
-        backtest_data = None
+        backtest_data: dict[str, Any] | None = None
 
         try:
             from packages.features.etf import build_rotation_signals
-            result = build_rotation_signals(mode="sample")
-            signals_data = result.get("signals", []) if isinstance(result, dict) else []
+            result = build_rotation_signals(mode="auto")
+            signals_result = result if isinstance(result, dict) else None
+            signals_data = signals_result.get("signals", []) if signals_result else []
         except Exception:
             logger.warning("ETF Agent: 轮动信号获取失败，使用空数据")
 
         try:
             from packages.features.backtest import run_etf_backtest
-            bt = run_etf_backtest(mode="sample", years=1)
+            bt = run_etf_backtest(mode="auto", years=1)
             backtest_data = bt if isinstance(bt, dict) else None
         except Exception:
             logger.warning("ETF Agent: 回测数据获取失败，跳过")
 
+        evidence = {
+            "signals": _etf_agent_evidence_meta(signals_result, count_key="signals"),
+            "backtest": _etf_agent_evidence_meta(backtest_data, count_key="equity_curve"),
+        }
+        aggregate = _aggregate_etf_agent_evidence(evidence)
         advice = _etf_rotation_agent.generate_advice(
             user_style=user_style,
             signals=signals_data,
             backtest=backtest_data,
         )
 
+        data = {
+            "advice": advice,
+            "style": inp.style,
+            "investment_horizon": inp.investment_horizon,
+            "risk_preference": inp.risk_preference,
+            "evidence": evidence,
+        }
         return wrap_contract(
-            {"advice": advice, "style": inp.style, "investment_horizon": inp.investment_horizon,
-             "risk_preference": inp.risk_preference},
-            source=data_source,
-            status="real",
+            data,
+            source=aggregate["source"],
+            status=aggregate["data_status"],
+            mock=aggregate["mock"],
+            message=aggregate["message"],
+            data_source=aggregate["source"],
+            data_mode=aggregate["data_mode"],
+            as_of=evidence["signals"].get("as_of"),
+            fallback_reason=aggregate["message"] or None,
+            evidence=evidence,
         )
     except Exception:
         logger.exception("ETF Agent生成建议失败")

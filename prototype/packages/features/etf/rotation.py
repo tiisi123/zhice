@@ -6,6 +6,7 @@ import time
 from typing import Any
 
 from packages.connectors.tushare import TushareClient
+from packages.features.etf.cache import load_cached_bundle, save_cached_bundle
 
 TRADE_DATES = [
     "2026-04-17",
@@ -298,6 +299,17 @@ def _derive_turnover_series_from_klines(klines: list[dict[str, Any]]) -> list[fl
 
 
 def _build_live_series_bundle() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    cached = load_cached_bundle(max_age_seconds=LIVE_CACHE_TTL_SEC)
+    if cached:
+        cached_series, cached_meta, is_fresh = cached
+        if cached_series and cached_meta:
+            cached_meta = dict(cached_meta)
+            cached_meta["note"] = (cached_meta.get("note") or "") + (
+                " (cache)" if is_fresh else " (cache-stale)"
+            )
+            cached_meta["cache_stale"] = not is_fresh
+            return cached_series, cached_meta
+
     client = TushareClient()
     if not client.configured:
         sample_series, sample_meta = _build_sample_series_bundle()
@@ -400,7 +412,9 @@ def _build_live_series_bundle() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "analysis_dates": analysis_dates,
         "as_of": as_of,
         "note": note,
+        "cache_stale": False,
     }
+    save_cached_bundle(series, meta)
     return series, meta
 
 

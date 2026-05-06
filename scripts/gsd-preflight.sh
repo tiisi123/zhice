@@ -3,29 +3,35 @@ set -euo pipefail
 
 echo "== GSD preflight =="
 
-if [ ! -d ".gsd" ]; then
-  echo "ERROR: .gsd directory not found"
-  exit 1
-fi
-
 if [ -f ".gsd/auto.lock" ]; then
   echo "WARN: removing stale .gsd/auto.lock"
   rm -f .gsd/auto.lock
 fi
 
-echo "== Empty plan files =="
-find .gsd -name "*-PLAN.md" -size 0 -print || true
+if [ -d ".gsd" ]; then
+  echo "== Empty plan files =="
+  find .gsd -name "*-PLAN.md" -size 0 -print || true
 
-echo "== Existing plan files =="
-find .gsd -name "*-PLAN.md" -print | sort || true
+  echo "== Existing plan files =="
+  find .gsd -name "*-PLAN.md" -print | sort || true
+else
+  echo "INFO: .gsd directory not found. gsd-pi can still report repository state."
+fi
 
-echo "== gsd doctor =="
-gsd doctor || {
-  echo "WARN: gsd doctor reported issues"
-  echo "Attempting gsd recover..."
-  gsd recover
-  gsd doctor
-}
+if ! command -v gsd >/dev/null 2>&1; then
+  echo "WARN: gsd CLI not found on PATH. Install gsd-pi before running auto mode:"
+  echo "      npm install -g gsd-pi"
+  echo "== Git status =="
+  git status --short || true
+  echo "== Preflight complete with warnings =="
+  exit 0
+fi
+
+echo "== gsd version =="
+gsd --version
+
+echo "== gsd headless query =="
+gsd headless --timeout 60000 query --output-format json
 
 echo "== Git status =="
 git status --short || true

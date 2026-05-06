@@ -19,6 +19,10 @@ router = APIRouter()
 _analyst = BacktestAnalystAgent()
 
 
+def _industry_is_live(industries: list[dict]) -> bool:
+    return bool(industries) and any(item.get("data_mode") == "live" for item in industries)
+
+
 def _financial_meta_d004(fin: dict) -> tuple[str, bool, str]:
     """Return (source, sample_mode, base_message) for D004 wrap_contract calls.
 
@@ -305,7 +309,7 @@ def diffusion_index():
     try:
         industries = get_industry_prosperity()
         result = calc_diffusion_index(industries)
-        is_real = bool(industries) and industries[0].get("data_source") == "tushare"
+        is_real = _industry_is_live(industries)
         extras = {
             k: v for k, v in result.items()
             if k not in ("source", "data_status", "mock", "message", "updated_at")
@@ -327,7 +331,7 @@ def turning_points(threshold: int = Query(10)):
     try:
         industries = get_industry_prosperity()
         alerts = detect_turning_points(industries, threshold)
-        is_real = bool(industries) and industries[0].get("data_source") == "tushare"
+        is_real = _industry_is_live(industries)
         if not alerts:
             tp_status = "empty"
         elif is_real:
@@ -392,7 +396,7 @@ def generate_weekly_report():
         industries = get_industry_prosperity()
         diffusion = calc_diffusion_index(industries)
         turning = detect_turning_points(industries)
-        is_real = bool(industries) and industries[0].get("data_source") == "tushare"
+        is_real = _industry_is_live(industries)
 
         context = f"""景气扩散指数: {diffusion['diffusion_index']} ({diffusion['interpretation']})
 上行行业: {diffusion['up_count']}个, 下行: {diffusion['down_count']}个
