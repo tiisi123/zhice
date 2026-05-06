@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     anthropic_base_url: str = "https://api.anthropic.com"
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_chat_model: str = "deepseek-v4-pro"
+    deepseek_fast_model: str = "deepseek-v4-flash"
 
     # App
     debug: bool = False

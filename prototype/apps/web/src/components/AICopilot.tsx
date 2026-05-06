@@ -113,7 +113,7 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
   const [report, setReport] = useState<string | null>(null)
   const [reportSummary, setReportSummary] = useState<AnyData>(null)
   const [chatInput, setChatInput] = useState('')
-  const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string; sources?: string[] }>>([])
+  const [chatMessages, setChatMessages] = useState<Array<{ role: string; content: string; sources?: string[]; evidence?: AnyData }>>([])
   const [loading, setLoading] = useState(false)
 
   const pageHint = PAGE_HINTS[currentPage] || PAGE_HINTS[Object.keys(PAGE_HINTS).find(k => currentPage.startsWith(k)) || ''] || null
@@ -170,13 +170,13 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
     setLoading(true)
     try {
       const contextPrefix = pageHint ? `[当前页面: ${pageHint.label}] ` : ''
-      const data = await postApi<{ response: string; context_sources?: string[] }>('/ai/chat', {
+      const data = await postApi<{ response: string; context_sources?: string[]; evidence?: AnyData }>('/ai/chat', {
         message: contextPrefix + msg,
         history: chatMessages.slice(-6),
         current_page: currentPage,
         trade_date: reportSummary?.trade_date || new Date().toISOString().slice(0, 10),
       })
-      setChatMessages(prev => [...prev, { role: 'ai', content: data.response || '无回复', sources: data.context_sources || [] }])
+      setChatMessages(prev => [...prev, { role: 'ai', content: data.response || '无回复', sources: data.context_sources || [], evidence: data.evidence }])
     } catch {
       setChatMessages(prev => [...prev, { role: 'ai', content: '请求失败，请检查后端服务。' }])
     }
@@ -274,6 +274,11 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
                 {m.role !== 'user' && m.sources && m.sources.length > 0 && (
                   <div style={{ marginTop: 4, fontSize: 11, color: '#999' }}>
                     数据上下文：{m.sources.join('、')}
+                  </div>
+                )}
+                {m.role !== 'user' && m.evidence?.theme_stocks && (
+                  <div style={{ marginTop: 4, fontSize: 11, color: '#999' }}>
+                    题材明细：{m.evidence.theme_stocks.theme} · 涨停 {m.evidence.theme_stocks.limit_up_count} 只 · 炸板 {m.evidence.theme_stocks.broken_count} 只
                   </div>
                 )}
               </div>

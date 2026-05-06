@@ -22,6 +22,11 @@ from apps.ai.agents.agents import (
     BoardTradingAgent,
     EtfRotationAgent,
 )
+from apps.ai.context_builders.copilot_orchestrator import (
+    build_copilot_evidence,
+    build_theme_stocks,
+    format_copilot_evidence,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -79,7 +84,7 @@ def headline(date: Optional[str] = Query(None)):
         from apps.ai.agents.llm_client import llm
 
         context = build_market_context(summary, limit_up, broken, sectors)
-        text = llm.chat(MARKET_HEADLINE.format(context=context))
+        text = llm.fast_chat(MARKET_HEADLINE.format(context=context))
         text = text.strip().strip("「」""''")
         _headline_cache.put(trade_date, text)
         return wrap_contract(
@@ -321,6 +326,32 @@ def _build_chat_market_context(trade_date: str) -> tuple[str, list[str]]:
         return f"## 市场数据\n- trade_date: {trade_date}\n- KPL 核心市场上下文暂不可用，回答需明确提示数据缺口。", sources
 
 
+@router.get("/theme-stocks")
+def ai_theme_stocks(theme: str = Query(..., min_length=1, max_length=50), date: Optional[str] = Query(None)):
+    trade_date = date or datetime.now().strftime("%Y-%m-%d")
+    try:
+        data = build_theme_stocks(theme, trade_date)
+        return wrap_contract(
+            data,
+            source="kpl",
+            status="real" if data.get("limit_up_stocks") or data.get("broken_stocks") else "empty",
+            trade_date=trade_date,
+            theme=theme,
+            count=data.get("limit_up_count", 0),
+        )
+    except Exception:
+        logger.exception("AI theme stocks failed: %s", theme)
+        return wrap_contract(
+            {},
+            source="kpl",
+            status="unavailable",
+            message="题材股票明细获取失败",
+            trade_date=trade_date,
+            theme=theme,
+            count=0,
+        )
+
+
 @router.post("/chat")
 def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
     try:
@@ -328,7 +359,9 @@ def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
         trade_date = inp.trade_date or datetime.now().strftime("%Y-%m-%d")
         page_ctx = _page_context(inp.current_page)
         market_context, context_sources = _build_chat_market_context(trade_date)
-        context_sources = list(dict.fromkeys([*page_ctx["apis"], *context_sources]))
+        evidence = build_copilot_evidence(inp.message, inp.current_page, trade_date)
+        evidence_text = format_copilot_evidence(evidence)
+        context_sources = list(dict.fromkeys([*page_ctx["apis"], *context_sources, *evidence.get("sources", [])]))
 
         # 构建包含历史的对话上下文
         history_text = ""
@@ -348,8 +381,15 @@ def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
 子页面数据规则：你不能直接读取前端隐藏组件的本地状态；但只要对应后端 API 已知，就可以基于这些 API 的全局/页面上下文回答跨板块问题。
 连续追问规则：结合最近 6 轮历史回答，不要丢失用户上一轮限定条件。
 数据时间：{trade_date}。AI 速报和本次短线上下文默认使用当日 KPL 实时/收盘口径数据；若用户询问历史日，则以传入日期为准。
+回答约束：
+- 如果用户追问“某题材的 N 只票”，必须先使用下方 evidence.theme_stocks 里的股票明细逐只分析。
+- 如果 evidence.theme_stocks 为空，不要编造股票名单；请明确说当前 API 未匹配到题材成分股，并建议用户换题材名或补充股票代码。
+- 不允许输出“买入/卖出/满仓”等指令；用“关注/观察/回避/等待确认/风险边界”表达。
 
 {market_context}
+
+结构化证据包：
+{evidence_text}
 
 最近对话：
 {history_text if history_text else "无"}
@@ -362,6 +402,7 @@ def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
             "message": inp.message,
             "response": response,
             "context_sources": context_sources,
+            "evidence": evidence,
             "trade_date": trade_date,
         }
     except Exception:

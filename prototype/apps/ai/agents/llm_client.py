@@ -16,6 +16,11 @@ class LLMClient:
         self._client = httpx.Client(timeout=60)
 
     def chat(self, prompt: str, model: str = "gpt-4o") -> str:
+        if settings.deepseek_api_key:
+            try:
+                return self._call_deepseek(prompt, settings.deepseek_chat_model)
+            except Exception as e:
+                logger.warning("DeepSeek call failed, falling back to next provider: %s", e)
         if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
             try:
                 return self._call_openai(prompt, model)
@@ -27,6 +32,32 @@ class LLMClient:
             except Exception as e:
                 logger.warning("Anthropic call failed, falling back to mock: %s", e)
         return self._mock_response(prompt)
+
+    def fast_chat(self, prompt: str) -> str:
+        if settings.deepseek_api_key:
+            try:
+                return self._call_deepseek(prompt, settings.deepseek_fast_model)
+            except Exception as e:
+                logger.warning("DeepSeek fast call failed, falling back to chat: %s", e)
+        return self.chat(prompt)
+
+    def _call_deepseek(self, prompt: str, model: str) -> str:
+        base = settings.deepseek_base_url.rstrip("/")
+        resp = self._client.post(
+            f"{base}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {settings.deepseek_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.3,
+                "max_tokens": 2000,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
 
     def _call_openai(self, prompt: str, model: str) -> str:
         resp = self._client.post(
