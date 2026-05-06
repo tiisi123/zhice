@@ -248,20 +248,122 @@ def strategy_dsl(inp: StrategyInput):
 class ChatInput(BaseModel):
     message: str
     history: list[dict] = []
+    current_page: Optional[str] = None
+    trade_date: Optional[str] = None
+
+
+PAGE_CONTEXTS = {
+    "/replay": {
+        "label": "收盘复盘",
+        "apis": [
+            "GET /api/market/summary",
+            "GET /api/market/ladder",
+            "GET /api/market/sectors",
+            "GET /api/market/capital-flow",
+            "GET /api/market/next-day-strategy",
+        ],
+    },
+    "/theme": {
+        "label": "题材板块",
+        "apis": ["GET /api/market/sectors", "GET /api/theme/*", "GET /api/ai/theme-analysis/{theme_name}"],
+    },
+    "/intraday": {
+        "label": "盘中盯盘",
+        "apis": ["GET /api/intraday/*", "GET /api/market/sectors", "GET /api/market/summary"],
+    },
+    "/etf-rotation": {
+        "label": "ETF轮动",
+        "apis": ["GET /api/etf/rotation/dashboard", "POST /api/ai/agent/etf-rotation"],
+    },
+    "/value": {
+        "label": "价值/持仓",
+        "apis": ["GET /api/value/*", "GET /api/finance/*"],
+    },
+    "/growth": {
+        "label": "成长景气",
+        "apis": ["GET /api/growth/*"],
+    },
+}
+
+
+def _page_context(current_page: Optional[str]) -> dict:
+    page = current_page or ""
+    for prefix, ctx in PAGE_CONTEXTS.items():
+        if page.startswith(prefix):
+            return ctx
+    return {
+        "label": page or "全局工作台",
+        "apis": ["GET /api/market/summary", "GET /api/market/sectors"],
+    }
+
+
+def _build_chat_market_context(trade_date: str) -> tuple[str, list[str]]:
+    sources = [
+        "GET /api/market/summary",
+        "GET /api/market/ladder",
+        "GET /api/market/sectors",
+        "KPL: market_statistics / limit_up / broken / concept_selected",
+    ]
+    try:
+        kpl_stats = _kpl.get_market_statistics(trade_date)
+        limit_up = _kpl.get_limit_up(trade_date)
+        broken = _kpl.get_broken(trade_date)
+        sectors = _kpl.get_concept_selected(trade_date)
+        summary = build_market_summary(kpl_stats, limit_up, broken)
+        summary["trade_date"] = trade_date
+
+        from apps.ai.context_builders.market_context import build_market_context
+
+        context = build_market_context(summary, limit_up, broken, sectors)
+        return context, sources
+    except Exception:
+        logger.warning("AI chat market context unavailable", exc_info=True)
+        return f"## 市场数据\n- trade_date: {trade_date}\n- KPL 核心市场上下文暂不可用，回答需明确提示数据缺口。", sources
 
 
 @router.post("/chat")
 def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
     try:
         from apps.ai.agents.llm_client import llm
+        trade_date = inp.trade_date or datetime.now().strftime("%Y-%m-%d")
+        page_ctx = _page_context(inp.current_page)
+        market_context, context_sources = _build_chat_market_context(trade_date)
+        context_sources = list(dict.fromkeys([*page_ctx["apis"], *context_sources]))
+
         # 构建包含历史的对话上下文
-        context = ""
+        history_text = ""
         for msg in inp.history[-6:]:
             role = "用户" if msg.get("role") == "user" else "AI"
-            context += f"{role}: {msg.get('content', '')}\n"
-        prompt = f"{context}用户: {inp.message}" if context else inp.message
+            history_text += f"{role}: {msg.get('content', '')}\n"
+        prompt = f"""
+你是智策 AI Copilot，请用中文回答用户问题。你需要像一个投研团队一样组织答案：
+
+1. 策略分析师：先给结论、可跟踪方向、风险边界和次日验证点。
+2. 数据分析师：解释结论来自哪些数据，指出样本口径、实时性和缺口。
+3. 风控分析师：提示不确定性，不给确定收益承诺，不构成投资建议。
+
+当前页面：{page_ctx["label"]}
+当前页面可用 API：{"、".join(page_ctx["apis"])}
+全局可补充 API：GET /api/market/summary、GET /api/market/ladder、GET /api/market/sectors、GET /api/market/capital-flow、GET /api/market/next-day-strategy
+子页面数据规则：你不能直接读取前端隐藏组件的本地状态；但只要对应后端 API 已知，就可以基于这些 API 的全局/页面上下文回答跨板块问题。
+连续追问规则：结合最近 6 轮历史回答，不要丢失用户上一轮限定条件。
+数据时间：{trade_date}。AI 速报和本次短线上下文默认使用当日 KPL 实时/收盘口径数据；若用户询问历史日，则以传入日期为准。
+
+{market_context}
+
+最近对话：
+{history_text if history_text else "无"}
+
+用户问题：
+{inp.message}
+"""
         response = llm.chat(prompt)
-        return {"message": inp.message, "response": response}
+        return {
+            "message": inp.message,
+            "response": response,
+            "context_sources": context_sources,
+            "trade_date": trade_date,
+        }
     except Exception:
         logger.exception("AI对话失败")
         raise HTTPException(status_code=500, detail="AI对话失败，请稍后重试")

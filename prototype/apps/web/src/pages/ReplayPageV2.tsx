@@ -599,7 +599,11 @@ function SectionThemes({ sectors, ladder }: { sectors: SectorRaw[]; ladder: Ladd
   return (
     <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
       <Col xs={24} lg={14}>
-        <SectionHeader icon={<FireOutlined />} title="今日主线 Top 3" />
+        <SectionHeader
+          icon={<FireOutlined />}
+          title="今日主线 Top 3"
+          subtitle="接口：GET /api/market/sectors?date=YYYY-MM-DD；KPL 概念题材强度排行"
+        />
         {top3.length === 0 && <Empty description="暂无主线数据" />}
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           {top3.map((t, i) => {
@@ -1555,10 +1559,6 @@ export default function ReplayPageV2() {
             size="small"
           />
         </div>
-        <Space size={8}>
-          {summary.prev_date && <span style={{ color: '#999', fontSize: 12 }}>对比 {summary.prev_date}</span>}
-          <Link to="/replay-legacy" style={{ fontSize: 12, color: '#999' }}>旧版 →</Link>
-        </Space>
       </div>
       {isMock && <Alert type="warning" showIcon message="接口标记为 mock" description="当前复盘页存在 mock 标记，请确认后端数据源。" style={{ marginBottom: 12 }} />}
       <MetaStrip items={apiMeta} />
@@ -1582,7 +1582,11 @@ export default function ReplayPageV2() {
       />
 
       <div data-feature="AI-Headline" data-feature-name="AI 一句话速报">
-        <AIInlineSummary endpoint="/ai/headline" params={{ date: selectedDate }} />
+        <AIInlineSummary
+          endpoint="/ai/headline"
+          params={{ date: selectedDate }}
+          metaText="基于当日 KPL 实时/收盘口径：市场统计、涨停池、炸板池、概念题材"
+        />
       </div>
       <div data-feature="Storyline" data-feature-name="今日故事线（三幕叙事）">
         <SectionStoryline summary={summary} sectors={sectors} ladder={ladder} relay={relay} />
