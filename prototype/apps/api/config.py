@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     ssh_password: str = ""
 
     # AI (Phase 2)
+    preferred_ai_api_key: str = ""
+    preferred_ai_base_url: str = "https://cc.maya.today/api/v1"
+    preferred_ai_chat_model: str = "gpt-4o"
+    preferred_ai_fast_model: str = "gpt-4o-mini"
     openai_api_key: str = ""
     anthropic_api_key: str = ""
     anthropic_base_url: str = "https://api.anthropic.com"

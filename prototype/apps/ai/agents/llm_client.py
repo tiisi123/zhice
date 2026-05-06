@@ -16,6 +16,16 @@ class LLMClient:
         self._client = httpx.Client(timeout=60)
 
     def chat(self, prompt: str, model: str = "gpt-4o") -> str:
+        if settings.preferred_ai_api_key:
+            try:
+                return self._call_openai_compatible(
+                    prompt,
+                    settings.preferred_ai_base_url,
+                    settings.preferred_ai_api_key,
+                    settings.preferred_ai_chat_model,
+                )
+            except Exception as e:
+                logger.warning("Preferred AI call failed, falling back to DeepSeek: %s", e)
         if settings.deepseek_api_key:
             try:
                 return self._call_deepseek(prompt, settings.deepseek_chat_model)
@@ -34,6 +44,16 @@ class LLMClient:
         return self._mock_response(prompt)
 
     def fast_chat(self, prompt: str) -> str:
+        if settings.preferred_ai_api_key:
+            try:
+                return self._call_openai_compatible(
+                    prompt,
+                    settings.preferred_ai_base_url,
+                    settings.preferred_ai_api_key,
+                    settings.preferred_ai_fast_model,
+                )
+            except Exception as e:
+                logger.warning("Preferred AI fast call failed, falling back to DeepSeek fast: %s", e)
         if settings.deepseek_api_key:
             try:
                 return self._call_deepseek(prompt, settings.deepseek_fast_model)
@@ -41,12 +61,12 @@ class LLMClient:
                 logger.warning("DeepSeek fast call failed, falling back to chat: %s", e)
         return self.chat(prompt)
 
-    def _call_deepseek(self, prompt: str, model: str) -> str:
-        base = settings.deepseek_base_url.rstrip("/")
+    def _call_openai_compatible(self, prompt: str, base_url: str, api_key: str, model: str) -> str:
+        base = base_url.rstrip("/")
         resp = self._client.post(
             f"{base}/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.deepseek_api_key}",
+                "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -58,6 +78,9 @@ class LLMClient:
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
+
+    def _call_deepseek(self, prompt: str, model: str) -> str:
+        return self._call_openai_compatible(prompt, settings.deepseek_base_url, settings.deepseek_api_key, model)
 
     def _call_openai(self, prompt: str, model: str) -> str:
         resp = self._client.post(
