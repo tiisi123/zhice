@@ -20,7 +20,7 @@ ZHICE_UID ?= 10001
 ZHICE_GID ?= 10001
 
 .PHONY: help deploy-init deploy-up deploy-down deploy-down-clean deploy-logs deploy-logs-api \
-        deploy-ps deploy-shell-api deploy-shell-db deploy-rebuild
+        deploy-ps deploy-shell-api deploy-shell-db deploy-rebuild gsd-preflight
 
 help: ## 显示可用目标
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -59,3 +59,14 @@ deploy-shell-db: ## 进入 zhice-db mysql client
 
 deploy-rebuild: ## 强制 no-cache 重建镜像
 	cd $(DEPLOY_DIR) && $(COMPOSE) build --no-cache
+
+gsd-preflight: ## 检查 GSD auto 运行前置条件
+	@if command -v bash >/dev/null 2>&1; then \
+		bash scripts/gsd-preflight.sh; \
+	elif command -v pwsh >/dev/null 2>&1; then \
+		pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/gsd-preflight.ps1; \
+	elif command -v powershell >/dev/null 2>&1; then \
+		powershell -NoProfile -ExecutionPolicy Bypass -File scripts/gsd-preflight.ps1; \
+	else \
+		echo "bash, pwsh, or powershell is required to run GSD preflight"; exit 1; \
+	fi

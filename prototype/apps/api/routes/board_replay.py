@@ -13,6 +13,7 @@ from packages.connectors.kpl.sentinel import (
     is_upstream_error,
 )
 from packages.connectors.registry import get_kpl
+from packages.normalizers.market_fields import normalize_change_rate
 
 router = APIRouter()
 
@@ -40,7 +41,7 @@ def _extract_stock(raw: dict) -> dict:
         "stock_code": raw.get("stock_code", ""),
         "stock_name": raw.get("stock_name", ""),
         "price": raw.get("price", 0.0),
-        "change_rate": raw.get("change_rate", 0.0),
+        "change_rate": normalize_change_rate(raw.get("change_rate", 0.0)),
         "limit_time": raw.get("first_limit_time") or raw.get("time", ""),
         "seal_amount": raw.get("seal_amount", 0.0),
         "board_count": raw.get("board_count", 0),

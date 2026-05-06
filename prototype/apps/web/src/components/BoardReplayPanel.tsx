@@ -30,7 +30,7 @@ const columns = [
     width: 70,
     render: (v: number) => (
       <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>
-        {(v * 100).toFixed(2)}%
+        {Number(v || 0).toFixed(2)}%
       </span>
     ),
   },
