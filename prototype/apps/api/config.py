@@ -102,7 +102,7 @@ class Settings(BaseSettings):
                 return False
         return bool(v)
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     @model_validator(mode="after")
     def validate_required_secrets(self) -> "Settings":
