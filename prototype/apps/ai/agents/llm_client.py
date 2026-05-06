@@ -16,7 +16,9 @@ class LLMClient:
         self._client = httpx.Client(timeout=60)
 
     def chat(self, prompt: str, model: str = "gpt-4o") -> str:
+        configured_provider = False
         if settings.preferred_ai_api_key:
+            configured_provider = True
             try:
                 return self._call_openai_compatible(
                     prompt,
@@ -27,20 +29,28 @@ class LLMClient:
             except Exception as e:
                 logger.warning("Preferred AI call failed, falling back to DeepSeek: %s", e)
         if settings.deepseek_api_key:
+            configured_provider = True
             try:
                 return self._call_deepseek(prompt, settings.deepseek_chat_model)
             except Exception as e:
                 logger.warning("DeepSeek call failed, falling back to next provider: %s", e)
         if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
+            configured_provider = True
             try:
                 return self._call_openai(prompt, model)
             except Exception as e:
                 logger.warning("OpenAI call failed, falling back to mock: %s", e)
         if settings.anthropic_api_key and settings.anthropic_api_key.startswith("sk-"):
+            configured_provider = True
             try:
                 return self._call_anthropic(prompt)
             except Exception as e:
                 logger.warning("Anthropic call failed, falling back to mock: %s", e)
+        if configured_provider:
+            return (
+                "AI 模型暂时不可用，已停止返回演示模板。请稍后重试，"
+                "或检查首选 API / DeepSeek 网关状态。以上分析仅供参考，不构成投资建议。"
+            )
         return self._mock_response(prompt)
 
     def fast_chat(self, prompt: str) -> str:
