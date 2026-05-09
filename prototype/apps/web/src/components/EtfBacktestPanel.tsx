@@ -14,8 +14,9 @@ const YEARS_OPTIONS = [
 ]
 
 const MODE_OPTIONS = [
-  { label: '演示数据', value: 'sample' },
+  { label: '自动', value: 'auto' },
   { label: '实盘数据', value: 'live' },
+  { label: '演示数据', value: 'sample' },
 ]
 
 const allocColumns = [
@@ -36,7 +37,7 @@ const allocColumns = [
 ]
 
 export default function EtfBacktestPanel() {
-  const [mode, setMode] = useState('sample')
+  const [mode, setMode] = useState('auto')
   const [years, setYears] = useState(1)
   const [data, setData] = useState<EtfBacktestResult | null>(null)
   const [raw, setRaw] = useState<AnyData>(null)
@@ -103,7 +104,7 @@ export default function EtfBacktestPanel() {
             value={mode}
             onChange={setMode}
             options={MODE_OPTIONS}
-            style={{ width: 110 }}
+            style={{ width: 120 }}
           />
           {YEARS_OPTIONS.map(({ label, value }) => (
             <Button

@@ -61,6 +61,42 @@ interface DetailStock {
   board_count?: number
 }
 
+interface ThemeLibraryRow {
+  theme_id: string
+  theme_name: string
+  theme_hot_num?: number
+  theme_zt_num?: number
+  theme_createtime?: string
+  change_percent?: number
+  source?: string
+  market_match?: AnyData
+}
+
+interface ThemeLibraryDetail {
+  theme_id?: string
+  theme_name?: string
+  theme_createtime?: string
+  theme_sub_detail?: {
+    stock_tag_name?: string
+    stock_code?: string
+    stock_name?: string
+    stock_hot_num?: number
+    stock_tag_reason?: string
+    price?: number
+    change_rate?: number
+    turnover_ratio?: number
+    amount?: number
+    net_flow?: number
+    quote_status?: string
+  }[]
+  stock_table?: AnyData[]
+  brief_intro?: string
+  introduction_html?: string
+  matched_sector?: AnyData
+  quote_match_status?: string
+  market_match?: AnyData
+}
+
 function safeText(v: unknown, fallback = '—'): string {
   if (v === undefined || v === null || v === '') return fallback
   return String(v)
@@ -94,6 +130,10 @@ function stockName(s: DetailStock): string {
 
 function stockChange(s: DetailStock): number {
   return safeNum(s.change_rate ?? s.ChangePercent)
+}
+
+function stripHtml(v: unknown): string {
+  return safeText(v, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
 }
 
 // ========== 题材热力气泡图 ==========
@@ -310,6 +350,199 @@ function ThemeDetailPanel({ name, cycles }: { name: string; cycles: Record<strin
   )
 }
 
+function ThemeLibraryView() {
+  const [rows, setRows] = useState<ThemeLibraryRow[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [detail, setDetail] = useState<ThemeLibraryDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [meta, setMeta] = useState<ApiMeta | null>(null)
+  const [detailMeta, setDetailMeta] = useState<ApiMeta | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      setLoading(true)
+      try {
+        const res = await fetchApi<{ data: ThemeLibraryRow[]; source?: string; data_status?: string; mock?: boolean; message?: string; trade_date?: string; count?: number }>('/theme/library')
+        if (cancelled) return
+        const list = [...(res.data || [])].sort((a, b) => safeNum(b.theme_hot_num) - safeNum(a.theme_hot_num))
+        setRows(list)
+        setMeta(extractMeta(res))
+        if (list.length > 0) setSelectedId(list[0].theme_id)
+      } catch {
+        if (!cancelled) {
+          setRows([])
+          setMeta({ source: 'kpl_theme_library', data_status: 'unavailable', mock: false, message: '题材库接口不可用。' } as ApiMeta)
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null)
+      setDetailMeta(null)
+      return
+    }
+    let cancelled = false
+    const run = async () => {
+      setDetailLoading(true)
+      try {
+        const res = await fetchApi<{ data: ThemeLibraryDetail; source?: string; data_status?: string; mock?: boolean; message?: string; trade_date?: string }>(`/theme/library/${encodeURIComponent(selectedId)}`)
+        if (cancelled) return
+        setDetail(res.data || null)
+        setDetailMeta(extractMeta(res))
+      } catch {
+        if (!cancelled) {
+          setDetail(null)
+          setDetailMeta({ source: 'kpl_theme_library', data_status: 'unavailable', mock: false, message: '题材库详情接口不可用。' } as ApiMeta)
+        }
+      } finally {
+        if (!cancelled) setDetailLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [selectedId])
+
+  const selectedRow = rows.find(r => r.theme_id === selectedId)
+  const stocks = detail?.theme_sub_detail || []
+  const intro = stripHtml(detail?.introduction_html)
+
+  if (loading) return <Spin style={{ display: 'block', margin: '80px auto' }} />
+
+  return (
+    <>
+      {meta && (
+        <Alert
+          type={meta.data_status === 'unavailable' || meta.data_status === 'error' ? 'error' : meta.data_status === 'fallback' ? 'warning' : meta.data_status === 'empty' ? 'info' : 'success'}
+          showIcon
+          message={<DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} />}
+          description={meta.message || '题材库列表优先取 KPL HomeThemeList；不可用时用板块强度/涨停池派生。'}
+          style={{ marginBottom: 12 }}
+        />
+      )}
+      {rows.length === 0 ? (
+        <Empty description="暂无题材库数据" />
+      ) : (
+        <Row gutter={16}>
+          <Col xs={24} lg={8}>
+            <Card size="small" title="题材库" bodyStyle={{ padding: 0 }}>
+              <div style={{ maxHeight: 620, overflow: 'auto' }}>
+                {rows.map((row, i) => {
+                  const active = row.theme_id === selectedId
+                  return (
+                    <div
+                      key={`${row.theme_id}-${i}`}
+                      onClick={() => setSelectedId(row.theme_id)}
+                      style={{
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f5f5f5',
+                        background: active ? '#e6f4ff' : 'transparent',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Badge count={i + 1} style={{ backgroundColor: i < 3 ? '#f5222d' : '#d9d9d9', fontSize: 11 }} />
+                        <span style={{ fontWeight: 600, flex: 1 }}>{row.theme_name}</span>
+                        {safeNum(row.theme_zt_num) > 0 && <Tag color="red">涨停 {safeNum(row.theme_zt_num)}</Tag>}
+                      </div>
+                      <div style={{ marginTop: 4, fontSize: 12, color: '#666', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <span>热度 {safeNum(row.theme_hot_num).toFixed(0)}</span>
+                        <span>涨幅 {safeNum(row.change_percent).toFixed(2)}%</span>
+                        {row.market_match?.best_match?.plate_name && <span>匹配 {row.market_match.best_match.plate_name}</span>}
+                        {row.theme_createtime && <span>{row.theme_createtime}</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </Card>
+          </Col>
+          <Col xs={24} lg={16}>
+            <Card
+              size="small"
+              title={<span><TagsOutlined style={{ color: '#1677ff' }} /> {detail?.theme_name || selectedRow?.theme_name || '题材详情'}</span>}
+              loading={detailLoading}
+              extra={detailMeta && <DataStatusBadge status={detailMeta.data_status as DataStatus} source={detailMeta.source} mock={detailMeta.mock} />}
+            >
+              {detailMeta?.message && <Alert type={detailMeta.data_status === 'fallback' ? 'warning' : 'info'} showIcon message={detailMeta.message} style={{ marginBottom: 12 }} />}
+              {(detail?.theme_createtime || selectedRow?.theme_createtime) && (
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
+                  生成时间：{detail?.theme_createtime || selectedRow?.theme_createtime}
+                </div>
+              )}
+              {detail?.brief_intro && (
+                <div style={{ background: '#fafafa', padding: 10, borderRadius: 6, marginBottom: 12, lineHeight: 1.8 }}>
+                  {detail.brief_intro}
+                </div>
+              )}
+              {detail?.market_match?.best_match && (
+                <div style={{ marginBottom: 12 }}>
+                  <Tag color="blue">匹配板块 {detail.market_match.best_match.plate_name}</Tag>
+                  <Tag>置信度 {detail.market_match.best_match.match_score}</Tag>
+                  {safeNum(detail.market_match.best_match.limit_up_num) > 0 && <Tag color="red">板块涨停 {safeNum(detail.market_match.best_match.limit_up_num)}</Tag>}
+                </div>
+              )}
+
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>题材成员</div>
+              {stocks.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8, marginBottom: 14 }}>
+                  {stocks.slice(0, 60).map((s, i) => (
+                    <div key={`${s.stock_code}-${i}`} style={{ border: '1px solid #f0f0f0', borderRadius: 6, padding: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                        <Link to={`/stock/${s.stock_code}`}>{safeText(s.stock_name)}</Link>
+                        {s.stock_tag_name && <Tag>{s.stock_tag_name}</Tag>}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{safeText(s.stock_code)}</div>
+                      <div style={{ fontSize: 12, marginTop: 4 }}>
+                        {s.quote_status === 'matched' ? (
+                          <>
+                            <span style={{ color: safeNum(s.change_rate) >= 0 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>
+                              {safeNum(s.change_rate) >= 0 ? '+' : ''}{safeNum(s.change_rate).toFixed(2)}%
+                            </span>
+                            <span style={{ color: '#666', marginLeft: 8 }}>价 {safeNum(s.price).toFixed(2)}</span>
+                            <span style={{ color: '#666', marginLeft: 8 }}>额 {(safeNum(s.amount) / 1e8).toFixed(1)}亿</span>
+                          </>
+                        ) : (
+                          <Tag>行情未匹配</Tag>
+                        )}
+                      </div>
+                      {s.stock_tag_reason && <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>{s.stock_tag_reason}</div>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Empty description="当前题材详情未返回细分个股；可先用左侧题材与板块强度匹配分析。" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+
+              {detail?.stock_table && detail.stock_table.length > 0 && (
+                <>
+                  <div style={{ fontWeight: 600, margin: '14px 0 8px' }}>产业链层级</div>
+                  <pre style={{ background: '#fafafa', padding: 10, borderRadius: 6, maxHeight: 220, overflow: 'auto', fontSize: 12 }}>
+                    {JSON.stringify(detail.stock_table, null, 2)}
+                  </pre>
+                </>
+              )}
+              {intro && (
+                <>
+                  <div style={{ fontWeight: 600, margin: '14px 0 8px' }}>题材正文</div>
+                  <div style={{ lineHeight: 1.9, color: '#444', whiteSpace: 'pre-wrap' }}>{intro}</div>
+                </>
+              )}
+            </Card>
+          </Col>
+        </Row>
+      )}
+    </>
+  )
+}
+
 // ========== 事件快讯精简版 ==========
 function EventTimeline({ onSelectTheme }: { onSelectTheme?: (name: string) => void }) {
   const [items, setItems] = useState<NewsItem[]>([])
@@ -508,6 +741,11 @@ export default function ThemeWorkshopPage() {
         onChange={(k) => setSearchParams({ tab: k }, { replace: true })}
         type="card"
         items={[
+          {
+            key: 'library',
+            label: <span><TagsOutlined /> 题材库</span>,
+            children: <ThemeLibraryView />,
+          },
           {
             key: 'events',
             label: <span><ThunderboltOutlined /> 事件时间线</span>,

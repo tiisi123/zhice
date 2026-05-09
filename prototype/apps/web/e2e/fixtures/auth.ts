@@ -15,6 +15,7 @@ export const MOCK_TOKEN = 'e2e-test-token-fixed'
 export async function injectAuth(page: Page) {
   await page.addInitScript(
     ({ token, user }) => {
+      localStorage.clear()
       localStorage.setItem('zhice.token', token)
       localStorage.setItem('zhice.user', JSON.stringify(user))
     },

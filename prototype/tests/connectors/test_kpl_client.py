@@ -23,6 +23,7 @@ from packages.connectors.kpl.endpoints import (
 )
 from packages.connectors.kpl.history_client import KplHistoryClient
 from packages.connectors.kpl.realtime_client import KplRealtimeClient, _recent_5min
+from packages.connectors.kpl.client import normalize_theme_library_detail
 
 
 DEVICE_ID = "a59f30e2-5978-3ab5-ac32-d6ae2cc89fd5"
@@ -176,6 +177,47 @@ def test_realtime_concept_subsection_uses_SonPlate_Info():
     assert data["IsShow"] == "1"
 
 
+def test_realtime_theme_info_uses_legacy_theme_payload():
+    fake_post, captured = _capture_post()
+    client = KplRealtimeClient(cookie="X", device_id=DEVICE_ID, token="T", user_id="U")
+    with patch.object(client._client, "post", side_effect=fake_post):
+        client.get_theme_info("297")
+    data = captured["data"]
+    assert data["a"] == "InfoGet"
+    assert data["c"] == "Theme"
+    assert data["ID"] == "297"
+    assert data["Token"] == "T"
+    assert data["UserID"] == "U"
+
+
+def test_normalize_theme_library_detail_preserves_legacy_blocks():
+    raw = {
+        "ID": 297,
+        "Name": "AI应用",
+        "CreateTime": "2026-05-08 15:00:00",
+        "StockList": [
+            {
+                "TagName": "算力",
+                "StockCode": "300001",
+                "StockName": "测试科技",
+                "HotNum": "88",
+                "Reason": "题材原因",
+            }
+        ],
+        "Table": [{"name": "上游", "children": []}],
+        "BriefIntro": "题材简介",
+        "Introduction": "<p>正文</p>",
+    }
+    result = normalize_theme_library_detail(raw, theme_id="297")
+    assert result["theme_id"] == "297"
+    assert result["theme_name"] == "AI应用"
+    assert result["theme_sub_detail"][0]["stock_code"] == "300001"
+    assert result["theme_sub_detail"][0]["stock_tag_name"] == "算力"
+    assert result["stock_table"][0]["name"] == "上游"
+    assert result["brief_intro"] == "题材简介"
+    assert result["introduction_html"] == "<p>正文</p>"
+
+
 # ------------------------------------------------------------------
 # _recent_5min lunch-break boundary cases (Difference #6)
 # ------------------------------------------------------------------
@@ -291,6 +333,21 @@ def test_realtime_lite_probe_payload():
     assert data["Index"] == "0"
 
 
+def test_realtime_stock_ranking_payload():
+    fake_post, captured = _capture_post(payload={"errcode": "0", "list": []})
+    client = KplRealtimeClient(cookie="X", device_id=DEVICE_ID)
+    with patch.object(client._client, "post", side_effect=fake_post):
+        client.get_stock_ranking(index=26, page_size=26)
+    data = captured["data"]
+    assert data["a"] == "RealRankingInfo_W8"
+    assert data["c"] == "NewStockRanking"
+    assert data["index"] == "26"
+    assert data["st"] == "26"
+    assert data["RStart"] == "0925"
+    assert data["REnd"] == "1500"
+    assert data["Ratio"] == "6"
+
+
 def test_history_lite_probe_payload_uses_yesterday():
     fake_post, captured = _capture_post(payload={"info": {"market_count": 5000}})
     client = KplHistoryClient(cookie="X", device_id=DEVICE_ID)
@@ -343,3 +400,27 @@ def test_facade_returns_empty_list_when_cookie_missing():
         assert result_today == []
         result_anomaly = facade.get_market_anomaly()  # realtime
         assert result_anomaly == []
+
+
+def test_facade_concept_selected_falls_back_to_sector_ranking_when_primary_empty():
+    from packages.connectors.kpl.client import KplClient
+
+    facade = KplClient(device_id=DEVICE_ID, cookie="X")
+
+    def fake_concept_selected(index=0, order=1):
+        return {"errcode": "0", "list": []}
+
+    def fake_sector_ranking(index=0, order=1):
+        return {
+            "errcode": "0",
+            "list": [["801168", "工业气体", -741, -5.414, 0.387, 15787465276, -204234891, 501426556]],
+        }
+
+    with patch.object(facade._realtime, "get_concept_selected", side_effect=fake_concept_selected), patch.object(
+        facade._realtime, "get_sectors_realtime", side_effect=fake_sector_ranking
+    ):
+        result = facade.get_concept_selected()
+
+    assert result
+    assert result[0]["PlateID"] == "801168"
+    assert result[0]["PlateName"] == "工业气体"

@@ -10,6 +10,12 @@ interface Props {
   date: string
 }
 
+function formatPercent(value: number | undefined | null) {
+  const raw = Number(value || 0)
+  const pct = Math.abs(raw) <= 1 ? raw * 100 : raw
+  return `${pct.toFixed(2)}%`
+}
+
 function renderSeats(seats: EnrichedSeat[]) {
   if (!seats || seats.length === 0) return '-'
   return (
@@ -41,7 +47,7 @@ const columns = [
     width: 70,
     render: (v: number) => (
       <span style={{ color: v >= 0 ? '#f5222d' : '#52c41a' }}>
-        {(v * 100).toFixed(2)}%
+        {formatPercent(v)}
       </span>
     ),
   },
@@ -65,7 +71,7 @@ const columns = [
     title: '换手率',
     dataIndex: 'turnover_ratio',
     width: 70,
-    render: (v: number) => v ? `${(v * 100).toFixed(1)}%` : '-',
+    render: (v: number) => v ? formatPercent(v) : '-',
   },
   {
     title: '概念',
@@ -129,6 +135,7 @@ export default function TopTradersPanel({ date }: Props) {
         <Space>
           <CrownOutlined style={{ color: '#fa8c16' }} />
           <span>游资席位</span>
+          {meta.trade_date && <Tag color="blue">{meta.trade_date}</Tag>}
           <DataStatusBadge status={meta.data_status as DataStatus} source={meta.source} mock={meta.mock} size="small" />
         </Space>
       }

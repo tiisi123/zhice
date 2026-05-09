@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom'
 import { fetchApi } from '../api/client'
 import { useMarketWS } from '../api/useMarketWS'
 import type { LimitUpStock, AnyData, ApiMeta, DataStatus } from '../api/types'
-import { extractMetaList } from '../api/useApiMeta'
+import { extractErrorMeta, extractMetaList } from '../api/useApiMeta'
 import {
   AskAIChip, SectionHeader,
 } from '../components/smart'
@@ -362,7 +362,7 @@ function SectionLeaders({ limitUp, broken, sectors }: { limitUp: LimitUpStock[];
 }
 
 // ========== Section D · 风险提示 ==========
-function SectionRisk({ broken, limitUp }: { broken: LimitUpStock[]; limitUp: LimitUpStock[] }) {
+function SectionRisk({ broken, limitUp, anomaly }: { broken: LimitUpStock[]; limitUp: LimitUpStock[]; anomaly: AnyData[] }) {
   const now = new Date()
   const nowMin = now.getHours() * 60 + now.getMinutes()
   const isEndSession = nowMin >= 14 * 60 + 30 && nowMin < 15 * 60
@@ -380,6 +380,22 @@ function SectionRisk({ broken, limitUp }: { broken: LimitUpStock[]; limitUp: Lim
     const m = toMinutes(s.time)
     return m !== null && nowMin - m <= 15
   })
+  const totalEvents = limitUp.length + broken.length
+  const brokenRate = totalEvents > 0 ? broken.length / totalEvents * 100 : 0
+  const maxBoard = limitUp.reduce((m, s) => Math.max(m, s.board_count || 1), 0)
+  const opportunityText = limitUp.length >= 80 && brokenRate < 30
+    ? `涨停 ${limitUp.length} 只，炸板率 ${brokenRate.toFixed(1)}%，短线情绪偏强，机会集中在主线前排。`
+    : limitUp.length >= 40
+      ? `涨停 ${limitUp.length} 只，炸板率 ${brokenRate.toFixed(1)}%，有活跃度但需筛强度。`
+      : `涨停 ${limitUp.length} 只，市场机会偏少，优先观察不追高。`
+  const riskText = highBroken.length > 0
+    ? `高位断板 ${highBroken.length} 只，注意高度衰竭。`
+    : broken.length > 0
+      ? `炸板 ${broken.length} 只但暂无 2 板以上高位断板。`
+      : `暂无炸板池风险样本。`
+  const anomalyText = anomaly.length > 0
+    ? `异动流 ${anomaly.length} 条，可结合热点榜确认资金方向。`
+    : '异动接口当前无返回，主要参考涨停/炸板池。'
 
   return (
     <Card
@@ -407,6 +423,7 @@ function SectionRisk({ broken, limitUp }: { broken: LimitUpStock[]; limitUp: Lim
                 )}
               </Space>
             )}
+            <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>{riskText}</div>
           </Card>
         </Col>
         <Col xs={24} md={8}>
@@ -423,6 +440,7 @@ function SectionRisk({ broken, limitUp }: { broken: LimitUpStock[]; limitUp: Lim
                 </div>
               </div>
             )}
+            <div style={{ marginTop: 6, fontSize: 12, color: '#666' }}>{opportunityText}</div>
           </Card>
         </Col>
         <Col xs={24} md={8}>
@@ -432,7 +450,9 @@ function SectionRisk({ broken, limitUp }: { broken: LimitUpStock[]; limitUp: Lim
             ) : recentBroken.length >= 3 ? (
               <Alert type="error" showIcon message={`近 15min 炸板 ${recentBroken.length} 只`} description="短时密集炸板，市场情绪转弱" style={{ fontSize: 12 }} />
             ) : (
-              <span style={{ fontSize: 12, color: '#999' }}>暂无异常提示</span>
+              <span style={{ fontSize: 12, color: '#666' }}>
+                最高 {maxBoard} 板 · {anomalyText}
+              </span>
             )}
           </Card>
         </Col>
@@ -528,31 +548,35 @@ export default function IntradayPageV2() {
   useEffect(() => {
     const load = async () => {
       setLoading(true)
-      const safe = async <T,>(p: Promise<T>) => {
-        try { return await p } catch (e) { return { __err: (e as Error)?.message || '请求失败' } as AnyData }
+      const safe = async <T,>(name: string, p: Promise<T>) => {
+        try { return await p } catch (e) { return { __err: true, __meta: extractErrorMeta(e, name) } as AnyData }
       }
       const [lu, br, hs, an, sec] = await Promise.all([
-        safe(fetchApi<ListResp<LimitUpStock>>('/market/limit-up')),
-        safe(fetchApi<ListResp<LimitUpStock>>('/market/broken')),
-        safe(fetchApi<ListResp<AnyData>>('/market/hot-stocks')),
-        safe(fetchApi<ListResp<AnyData>>('/market/anomaly')),
-        safe(fetchApi<ListResp<SectorRaw>>('/market/sectors')),
+        safe('涨停池', fetchApi<ListResp<LimitUpStock>>('/market/limit-up')),
+        safe('炸板池', fetchApi<ListResp<LimitUpStock>>('/market/broken')),
+        safe('热股', fetchApi<ListResp<AnyData>>('/market/hot-stocks')),
+        safe('异动', fetchApi<ListResp<AnyData>>('/market/anomaly')),
+        safe('题材', fetchApi<ListResp<SectorRaw>>('/market/sectors')),
       ])
       const errs = [lu, br, hs, an].filter((x: AnyData) => x?.__err)
-      if (errs.length === 4) setErrMsg(`后端不可达：${(errs[0] as AnyData).__err}`)
+      if (errs.length === 4) setErrMsg(`盘中接口不可用：${((errs[0] as AnyData).__meta as ApiMeta)?.message || '请求失败'}`)
       else setErrMsg('')
       setLimitUp(((lu as AnyData).data || []).map(normalizeStock))
       setBroken(((br as AnyData).data || []).map(normalizeStock))
       setHot(((hs as AnyData).data || []).map(normalizeStock))
       setAnomaly(((an as AnyData).data || []).map(normalizeStock))
       setSectors((sec as AnyData).data || [])
-      const nextMeta = extractMetaList([
+      const okMeta = extractMetaList([
         { name: '涨停池', resp: lu },
         { name: '炸板池', resp: br },
         { name: '热股', resp: hs },
         { name: '异动', resp: an },
         { name: '题材', resp: sec },
-      ]).filter((m) => !((m as AnyData).__err))
+      ])
+      const errMeta = [lu, br, hs, an, sec]
+        .map((x: AnyData) => x?.__meta as ApiMeta | undefined)
+        .filter((m): m is ApiMeta => Boolean(m))
+      const nextMeta = [...okMeta, ...errMeta]
       setMeta(nextMeta)
       setIsMock(nextMeta.some((m) => m.mock))
       setLoading(false)
@@ -631,7 +655,7 @@ export default function IntradayPageV2() {
       <div id="intraday-pulse"><SectionPulse limitUp={limitUp} broken={broken} /></div>
       <div id="intraday-leaders"><SectionLeaders limitUp={limitUp} broken={broken} sectors={sectors} /></div>
       <div id="intraday-anomaly"><AnomalyFlows limitUp={limitUp} broken={broken} hot={hot} anomaly={anomaly} /></div>
-      <div id="intraday-risk"><SectionRisk broken={broken} limitUp={limitUp} /></div>
+      <div id="intraday-risk"><SectionRisk broken={broken} limitUp={limitUp} anomaly={anomaly} /></div>
       <div id="intraday-watchlist">
         <Card size="small" title={<span><EyeOutlined /> 观察池</span>} style={{ marginBottom: 16 }}>
           <Link to="/research-pool">查看完整研究池 →</Link>

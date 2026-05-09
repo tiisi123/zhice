@@ -68,7 +68,7 @@ if ($apiCheck) {
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        "Set-Location '$Root'; python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort"
+        "Set-Location '$Root'; `$env:PYTHONPATH='$Root'; `$env:DEBUG='true'; python -m uvicorn apps.api.main:app --host 127.0.0.1 --port $ApiPort"
     )
     if (-not (Wait-HttpOk -Url "http://127.0.0.1:$ApiPort/api/health" -Expected '"status"' -TimeoutSec 30)) {
         throw "[zhice] API did not become healthy on $ApiPort. See $ApiLog and $ApiErrLog"
@@ -87,7 +87,7 @@ if ($webCheck) {
         "-NoProfile",
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        "Set-Location '$WebRoot'; `$env:VITE_API_PORT='$ApiPort'; npm run dev -- --host 127.0.0.1 --port $WebPort"
+        "Set-Location '$WebRoot'; `$env:VITE_API_PORT='$ApiPort'; npm run dev -- --host 127.0.0.1 --port $WebPort --strictPort"
     )
     if (-not (Wait-HttpOk -Url "http://127.0.0.1:$WebPort/login" -Expected 'root' -TimeoutSec 30)) {
         throw "[zhice] Web did not become healthy on $WebPort. See $WebLog and $WebErrLog"

@@ -75,5 +75,49 @@
     "score": 0,
     "up": 0,
     "down": 0
+  },
+  {
+    "date": "2026-05-06",
+    "limit_up": 101,
+    "broken": 30,
+    "broken_rate": 22.9,
+    "max_board": 4,
+    "sentiment": "回暖",
+    "score": "75",
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-05-07",
+    "limit_up": 101,
+    "broken": 30,
+    "broken_rate": 22.9,
+    "max_board": 4,
+    "sentiment": "回暖",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-05-08",
+    "limit_up": 100,
+    "broken": 31,
+    "broken_rate": 23.66,
+    "max_board": 5,
+    "sentiment": "回暖",
+    "score": 0,
+    "up": 0,
+    "down": 0
+  },
+  {
+    "date": "2026-05-09",
+    "limit_up": 98,
+    "broken": 17,
+    "broken_rate": 14.78,
+    "max_board": 4,
+    "sentiment": "高潮",
+    "score": 0,
+    "up": 0,
+    "down": 0
   }
 ]

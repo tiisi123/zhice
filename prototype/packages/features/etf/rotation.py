@@ -318,6 +318,7 @@ def _build_live_series_bundle() -> tuple[list[dict[str, Any]], dict[str, Any]]:
 
     series: list[dict[str, Any]] = []
     live_codes: list[str] = []
+    missing_codes: list[str] = []
     fallback_count = 0
     analysis_dates = list(TRADE_DATES)
     as_of = TRADE_DATES[-1]
@@ -359,6 +360,7 @@ def _build_live_series_bundle() -> tuple[list[dict[str, Any]], dict[str, Any]]:
                     live_codes.append(code)
                 else:
                     fallback_count += 1
+                    missing_codes.append(code)
                     series.append(
                         {
                             "code": base_item["code"],
@@ -373,6 +375,7 @@ def _build_live_series_bundle() -> tuple[list[dict[str, Any]], dict[str, Any]]:
                     )
             else:
                 fallback_count += 1
+                missing_codes.append(base_item["code"])
                 series.append(
                     {
                         "code": base_item["code"],
@@ -408,6 +411,7 @@ def _build_live_series_bundle() -> tuple[list[dict[str, Any]], dict[str, Any]]:
         "coverage": coverage,
         "live_count": len(live_codes),
         "fallback_count": fallback_count,
+        "tushare_missing_codes": missing_codes,
         "live_codes": live_codes,
         "analysis_dates": analysis_dates,
         "as_of": as_of,

@@ -6,7 +6,8 @@ from typing import Optional
 from fastapi import APIRouter, Query, HTTPException
 
 from apps.api.utils.contract import wrap_contract
-from packages.connectors.registry import get_kpl
+from packages.connectors.registry import get_kpl, get_tushare
+from packages.connectors.kpl.sentinel import cookie_unavailable_message, from_client_state
 from packages.features.pattern_match import (
     aggregate_outlook,
     match_patterns,
@@ -23,60 +24,70 @@ def _to_ts_code(code: str) -> str:
         return f"{raw}.SH"
     return f"{raw}.SZ"
 
+
+def _find_stock_in_pool(code: str, pools: list[tuple[str, list[dict]]]) -> tuple[dict | None, str | None]:
+    needle = code[:6]
+    for source, pool in pools:
+        for stock in pool or []:
+            if str(stock.get("stock_code", ""))[:6] == needle:
+                return stock, source
+    return None, None
+
+
+def _fetch_tushare_profile(code: str) -> tuple[dict, dict, list[dict], bool]:
+    ts = get_tushare()
+    if not ts.configured:
+        return {}, {}, [], False
+    basic = ts.get_stock_basic(code) or {}
+    daily_basic = ts.get_daily_basic_latest(code) or {}
+    daily = ts.get_daily(_to_ts_code(code), limit=60) or []
+    return basic, daily_basic, daily, True
+
 @router.get("/{code}")
 def stock_detail(code: str, date: Optional[str] = Query(None)):
-    """个股详情：聚合 KPL 涨停/炸板/热股数据 + KPL 题材数据"""
+    """个股详情：任意 A 股均可分析。
+
+    数据口径：
+    - 历史行情 / 基本资料 / 估值指标：Tushare
+    - 盘中短线状态 / 涨停池 / 炸板池 / 热股池：KPL
+    """
     try:
+        trade_date = date or datetime.now().strftime("%Y-%m-%d")
+        basic, daily_basic, daily_rows, tushare_configured = _fetch_tushare_profile(code)
+
         # 从涨停池查找
-        limit_up = _kpl.get_limit_up(date)
-        broken = _kpl.get_broken(date)
-        hot_stocks = _kpl.get_hot_stocks(date)
-
-        stock_info = None
-        match_source = None
-
-        # 在涨停池中查找
-        for s in limit_up:
-            if s.get("stock_code", "")[:6] == code[:6]:
-                stock_info = s
-                match_source = "limit_up"
-                break
-
-        # 在炸板池中查找
-        if not stock_info:
-            for s in broken:
-                if s.get("stock_code", "")[:6] == code[:6]:
-                    stock_info = s
-                    match_source = "broken"
-                    break
-
-        # 在热股中查找
-        if not stock_info:
-            for s in hot_stocks:
-                if s.get("stock_code", "")[:6] == code[:6]:
-                    stock_info = s
-                    match_source = "hot"
-                    break
-
-        if not stock_info:
-            return wrap_contract(
-                {},
-                source="kpl",
-                status="empty",
-                mock=False,
-                message="该股票今日不在涨停/炸板/热股池中",
-                code=code,
-                found=False,
-                themes=[],
-                capital_flow=None,
-            )
+        limit_up = _kpl.get_limit_up(trade_date)
+        broken = _kpl.get_broken(trade_date)
+        hot_stocks = _kpl.get_hot_stocks(trade_date)
+        stock_info, match_source = _find_stock_in_pool(
+            code,
+            [("limit_up", limit_up), ("broken", broken), ("hot", hot_stocks)],
+        )
+        stock_info = stock_info or {}
+        realtime_quote = _kpl.get_stock_realtime(code) or {}
+        realtime_sentinel = from_client_state(_kpl)
+        realtime_status = (
+            "real"
+            if realtime_quote
+            else "unavailable"
+            if realtime_sentinel
+            else "empty"
+        )
+        realtime_message = (
+            ""
+            if realtime_quote
+            else cookie_unavailable_message(realtime_sentinel)
+            if realtime_sentinel
+            else "KPL 全市场实时排行未返回该票；仍可使用 Tushare 历史行情/基本面分析。"
+        )
+        realtime_source = realtime_quote.get("source") or "kpl_new_stock_ranking"
 
         # 获取关联题材
         related_plates = stock_info.get("related_plates", [])
         first_plate = stock_info.get("first_plate_name", "") or stock_info.get("plate_name", "")
 
         # 构建资金流向近似（用换手率+流通市值估算）
-        turnover = stock_info.get("turnover_ratio", 0)
+        turnover = stock_info.get("turnover_ratio") or realtime_quote.get("turnover_ratio") or 0
         non_restricted = stock_info.get("non_restricted_capital", 0)
         total_capital = stock_info.get("total_capital", 0)
 
@@ -91,7 +102,9 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
         reason = stock_info.get("reason", "")
         combined_reason = stock_info.get("combined_reason", reason)
         board_count = stock_info.get("board_count", 0)
-        change_rate = stock_info.get("change_rate", 0)
+        latest_daily = daily_rows[-1] if daily_rows else {}
+        change_rate = stock_info.get("change_rate", realtime_quote.get("change_rate", latest_daily.get("pct_chg", 0)))
+        name = stock_info.get("stock_name") or realtime_quote.get("stock_name") or basic.get("name") or code[:6]
 
         # 同题材联动股
         linked_stocks = []
@@ -110,7 +123,7 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
         payload = {
             "code": code,
             "found": True,
-            "name": stock_info.get("stock_name", ""),
+            "name": name,
             "change_rate": change_rate,
             "board_count": board_count,
             "time": stock_info.get("time"),
@@ -123,13 +136,38 @@ def stock_detail(code: str, date: Optional[str] = Query(None)):
             },
             "capital_flow": capital_flow,
             "linked_stocks": linked_stocks,
-            "kline_label": f"{'连板' + str(board_count) if board_count > 1 else '首板' if match_source == 'limit_up' else '炸板' if match_source == 'broken' else '热股'}",
+            "kline_label": f"{'连板' + str(board_count) if board_count > 1 else '首板' if match_source == 'limit_up' else '炸板' if match_source == 'broken' else '热股' if match_source == 'hot' else '普通标的'}",
             "match_source": match_source,
+            "intraday": {
+                "source": realtime_source,
+                "trade_date": trade_date,
+                "status": realtime_status,
+                "message": realtime_message,
+                "realtime": realtime_quote,
+                "short_pool": {
+                    "in_pool": bool(match_source),
+                    "pool": match_source,
+                    "message": "该票当前盘中短线事件为空；不在涨停/炸板/热股池。" if not match_source else "",
+                },
+            },
+            "history": {
+                "source": "tushare",
+                "configured": tushare_configured,
+                "stock_basic": basic,
+                "daily_basic": daily_basic,
+                "daily": daily_rows,
+                "message": "" if tushare_configured else "TUSHARE_TOKEN 未配置，历史行情/基本面不可用。",
+            },
+            "data_sources": [
+                {"name": "历史行情/基本资料/估值", "source": "tushare", "status": "real" if daily_rows or basic or daily_basic else "empty" if tushare_configured else "unavailable"},
+                {"name": "盘中全市场实时行情", "source": realtime_source, "status": realtime_status},
+                {"name": "盘中涨停/炸板/热股事件", "source": "kpl_event_pools", "status": "real" if match_source else "empty"},
+            ],
         }
         return wrap_contract(
             payload,
-            source="kpl",
-            status="real",
+            source="tushare+kpl",
+            status="real" if (tushare_configured or match_source) else "unavailable",
             mock=False,
             **payload,
         )

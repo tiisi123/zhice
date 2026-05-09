@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Optional
 
 import httpx
@@ -13,11 +14,21 @@ logger = logging.getLogger(__name__)
 
 class LLMClient:
     def __init__(self):
-        self._client = httpx.Client(timeout=60)
+        self._client = httpx.Client(
+            timeout=httpx.Timeout(60.0, connect=5.0, read=45.0, write=10.0)
+        )
+        self._provider_cooldown_until: dict[str, float] = {}
+        self._cooldown_seconds = 60.0
+
+    def _cooling_down(self, provider: str) -> bool:
+        return self._provider_cooldown_until.get(provider, 0.0) > time.time()
+
+    def _mark_failed(self, provider: str) -> None:
+        self._provider_cooldown_until[provider] = time.time() + self._cooldown_seconds
 
     def chat(self, prompt: str, model: str = "gpt-4o") -> str:
         configured_provider = False
-        if settings.preferred_ai_api_key:
+        if settings.preferred_ai_api_key and not self._cooling_down("preferred"):
             configured_provider = True
             try:
                 return self._call_openai_compatible(
@@ -27,20 +38,26 @@ class LLMClient:
                     settings.preferred_ai_chat_model,
                 )
             except Exception as e:
+                self._mark_failed("preferred")
                 logger.warning("Preferred AI call failed, falling back to DeepSeek: %s", e)
-        if settings.deepseek_api_key:
+        elif settings.preferred_ai_api_key:
+            configured_provider = True
+        if settings.deepseek_api_key and not self._cooling_down("deepseek"):
             configured_provider = True
             try:
                 return self._call_deepseek(prompt, settings.deepseek_chat_model)
             except Exception as e:
+                self._mark_failed("deepseek")
                 logger.warning("DeepSeek call failed, falling back to next provider: %s", e)
-        if settings.openai_api_key and settings.openai_api_key.startswith("sk-"):
+        elif settings.deepseek_api_key:
+            configured_provider = True
+        if settings.zhice_ai_openai_api_key and settings.zhice_ai_openai_api_key.startswith("sk-"):
             configured_provider = True
             try:
                 return self._call_openai(prompt, model)
             except Exception as e:
                 logger.warning("OpenAI call failed, falling back to mock: %s", e)
-        if settings.anthropic_api_key and settings.anthropic_api_key.startswith("sk-"):
+        if settings.zhice_ai_anthropic_api_key and settings.zhice_ai_anthropic_api_key.startswith("sk-"):
             configured_provider = True
             try:
                 return self._call_anthropic(prompt)
@@ -54,7 +71,7 @@ class LLMClient:
         return self._mock_response(prompt)
 
     def fast_chat(self, prompt: str) -> str:
-        if settings.preferred_ai_api_key:
+        if settings.preferred_ai_api_key and not self._cooling_down("preferred"):
             try:
                 return self._call_openai_compatible(
                     prompt,
@@ -63,11 +80,13 @@ class LLMClient:
                     settings.preferred_ai_fast_model,
                 )
             except Exception as e:
+                self._mark_failed("preferred")
                 logger.warning("Preferred AI fast call failed, falling back to DeepSeek fast: %s", e)
-        if settings.deepseek_api_key:
+        if settings.deepseek_api_key and not self._cooling_down("deepseek"):
             try:
                 return self._call_deepseek(prompt, settings.deepseek_fast_model)
             except Exception as e:
+                self._mark_failed("deepseek")
                 logger.warning("DeepSeek fast call failed, falling back to chat: %s", e)
         return self.chat(prompt)
 
@@ -129,7 +148,7 @@ class LLMClient:
         resp = self._client.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Authorization": f"Bearer {settings.zhice_ai_openai_api_key}",
                 "Content-Type": "application/json",
             },
             json={
@@ -143,11 +162,11 @@ class LLMClient:
         return resp.json()["choices"][0]["message"]["content"]
 
     def _call_anthropic(self, prompt: str) -> str:
-        base = settings.anthropic_base_url.rstrip("/")
+        base = settings.zhice_ai_anthropic_base_url.rstrip("/")
         resp = self._client.post(
             f"{base}/v1/messages",
             headers={
-                "x-api-key": settings.anthropic_api_key,
+                "x-api-key": settings.zhice_ai_anthropic_api_key,
                 "anthropic-version": "2023-06-01",
                 "Content-Type": "application/json",
             },

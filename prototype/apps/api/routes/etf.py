@@ -15,8 +15,10 @@ router = APIRouter()
 #   sample → ('mock',     sample-flag-on)
 _MODE_TO_D004 = {
     "live": ("real", False),
+    "cache": ("real", False),
     "hybrid": ("fallback", False),
     "sample": ("mock", True),
+    "unavailable": ("unavailable", False),
 }
 
 
@@ -32,7 +34,10 @@ def etf_rotation_dashboard(
         status, mock_flag = _MODE_TO_D004.get(data.get("data_mode", "sample"), ("mock", True))
         extras = {
             k: v for k, v in data.items()
-            if k not in ("source", "data_status", "mock", "message", "updated_at")
+            if k not in (
+                "source", "data_status", "mock", "message", "updated_at",
+                "data_source", "data_mode", "as_of", "fallback_reason",
+            )
         }
         return wrap_contract(
             data,
@@ -40,6 +45,10 @@ def etf_rotation_dashboard(
             status=status,
             mock=mock_flag,
             message=data.get("data_note", ""),
+            data_source=data.get("data_source", "sample_engine"),
+            data_mode=data.get("data_mode", "sample"),
+            as_of=data.get("as_of", ""),
+            fallback_reason=data.get("fallback_reason") or data.get("note", ""),
             **extras,
         )
     except Exception as e:
@@ -58,6 +67,10 @@ def etf_rotation_signals(
             source=data.get("data_source", "sample_engine"),
             status=status,
             mock=mock_flag,
+            data_source=data.get("data_source", "sample_engine"),
+            data_mode=data.get("data_mode", "sample"),
+            as_of=data.get("as_of", ""),
+            fallback_reason=data.get("fallback_reason") or data.get("note", ""),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ETF轮动信号获取失败: {str(e)}")

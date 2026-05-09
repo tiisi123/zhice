@@ -243,6 +243,10 @@ def alternative_data(code: str):
             status="mock" if data else "empty",
             mock=bool(data),
             message="另类数据为静态样例，真实源待接入",
+            data_source="sample_alternative_data",
+            data_mode="sample" if data else "empty",
+            as_of="",
+            fallback_reason="real_alternative_source_not_connected" if data else "no_static_alternative_match",
             code=code,
             count=len(data),
         )
@@ -358,9 +362,13 @@ def macro_transmission(change: str):
         return wrap_contract(
             chain,
             source="macro_transmission_rules",
-            status="real",
+            status="fallback",
             mock=False,
             message="宏观传导为固定规则推演",
+            data_source="macro_transmission_rules",
+            data_mode="static",
+            as_of="",
+            fallback_reason="static_rule_only",
             macro_change=change,
             transmission=chain,
         )

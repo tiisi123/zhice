@@ -114,6 +114,31 @@ def build_next_day_strategy(
 
     top_themes = _pick_top_themes(sectors, 3)
     all_stocks = _flatten_ladder(ladder)
+    theme_members: dict[str, list[dict]] = {}
+    for sector in sectors:
+        name = (
+            sector.get("name")
+            or sector.get("PlateName")
+            or sector.get("concept_name")
+            or sector.get("first_plate_name")
+            or ""
+        )
+        members = sector.get("limit_up_members") or []
+        if name and isinstance(members, list):
+            theme_members[str(name)] = members
+
+    def _stock_payload(s: dict, reason: str) -> dict:
+        code = s.get("stock_code") or s.get("code") or ""
+        name = s.get("stock_name") or s.get("name") or ""
+        return {
+            "code": code,
+            "stock_code": code,
+            "name": name,
+            "stock_name": name,
+            "board_count": s.get("board_count", 1),
+            "theme": s.get("first_plate_name") or s.get("theme") or "",
+            "reason": reason,
+        }
 
     # ---- 1. 溢价场景候选：高板龙头 + 板块强度高 ----
     premium_pool = [
@@ -122,13 +147,13 @@ def build_next_day_strategy(
     ]
     if not premium_pool:
         premium_pool = [s for s in all_stocks if s.get("board_count", 0) >= 3][:5]
-    premium_stocks = [{
-        "code": s.get("stock_code", ""),
-        "name": s.get("stock_name", ""),
-        "board_count": s.get("board_count", 1),
-        "theme": s.get("first_plate_name", ""),
-        "reason": "高板龙头次日高开冲高",
-    } for s in premium_pool[:5]]
+    premium_stocks = [
+        _stock_payload(
+            s,
+            f"{s.get('stock_name') or s.get('name') or '高板龙头'} {s.get('board_count', 1)}板，次日观察高开承接",
+        )
+        for s in premium_pool[:5]
+    ]
 
     if sentiment == "高潮" and max_board >= 5:
         premium_logic = f"情绪【{sentiment}】+ 最高板 {max_board}，龙头次日高开溢价空间打开。"
@@ -145,13 +170,19 @@ def build_next_day_strategy(
         s for s in all_stocks
         if 1 <= s.get("board_count", 0) <= 2 and (s.get("first_plate_name", "") in top_themes)
     ]
-    dip_stocks = [{
-        "code": s.get("stock_code", ""),
-        "name": s.get("stock_name", ""),
-        "board_count": s.get("board_count", 1),
-        "theme": s.get("first_plate_name", ""),
-        "reason": f"主线【{s.get('first_plate_name','')}】低位接力候选",
-    } for s in dip_pool[:8]]
+    if not dip_pool:
+        for theme in top_themes:
+            dip_pool.extend([
+                s for s in theme_members.get(theme, [])
+                if 1 <= s.get("board_count", 0) <= 2
+            ])
+    dip_stocks = [
+        _stock_payload(
+            s,
+            f"主线【{s.get('first_plate_name') or s.get('theme') or '热点'}】{s.get('board_count', 1)}板低位接力候选",
+        )
+        for s in dip_pool[:8]
+    ]
 
     if sentiment in ("回暖", "高潮") and len(top_themes) >= 2:
         dip_logic = f"主线 {' / '.join(top_themes[:2])} 强势，1-2 板成员次日回踩低吸性价比高。"
@@ -169,13 +200,19 @@ def build_next_day_strategy(
         s for s in all_stocks
         if s.get("board_count", 0) == 1 and (s.get("first_plate_name", "") in top_themes)
     ]
-    ladder_stocks = [{
-        "code": s.get("stock_code", ""),
-        "name": s.get("stock_name", ""),
-        "board_count": s.get("board_count", 1),
-        "theme": s.get("first_plate_name", ""),
-        "reason": f"主线【{s.get('first_plate_name','')}】首板，次日有连板预期",
-    } for s in ladder_pool[:6]]
+    if not ladder_pool:
+        for theme in top_themes:
+            ladder_pool.extend([
+                s for s in theme_members.get(theme, [])
+                if s.get("board_count", 0) == 1
+            ])
+    ladder_stocks = [
+        _stock_payload(
+            s,
+            f"主线【{s.get('first_plate_name') or s.get('theme') or '热点'}】首板，次日观察弱转强",
+        )
+        for s in ladder_pool[:6]
+    ]
 
     if seal_success_rate >= 70 and limit_up_count >= 30:
         ladder_logic = f"封板率 {seal_success_rate:.0f}%，市场承接力强，可挂单排板首板龙头。"

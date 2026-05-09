@@ -13,10 +13,10 @@ import { askAI } from '../api/copilot'
 import AIDisclaimer from '../components/AIDisclaimer'
 import AIBadge from '../components/AIBadge'
 import type { MarketSummary, LadderData, LimitUpStock, AnyData, ApiMeta, DataStatus } from '../api/types'
-import { extractMetaList } from '../api/useApiMeta'
+import { extractErrorMeta, extractMetaList } from '../api/useApiMeta'
 import DataStatusBadge from '../components/DataStatusBadge'
 import {
-  AIInlineSummary, ContradictionAlert, DeltaIndicator,
+  ContradictionAlert, DeltaIndicator,
   ProgressiveFold, AskAIChip, SectionHeader,
   type ContradictionRule,
 } from '../components/smart'
@@ -25,6 +25,7 @@ import TopTradersPanel from '../components/TopTradersPanel'
 
 // ========== 类型 ==========
 interface SectorRaw {
+  name?: string
   PlateName?: string
   concept_name?: string
   col2?: string
@@ -42,6 +43,8 @@ interface SectorRaw {
   change_rate?: number | string
   intensity?: number | string
   net_flow?: number | string
+  limit_up_members?: LimitUpStock[]
+  limit_up_count?: number
 }
 
 interface RelayItem {
@@ -51,6 +54,18 @@ interface RelayItem {
 interface RelayResp { trade_date: string; prev_date: string | null; relay: RelayItem[]; note?: string }
 interface SentimentHistPoint { date: string; score?: number; limit_up?: number; sentiment?: string }
 interface CapitalItem { name: string; net_flow: number; amount: number; change: number; intensity: number }
+interface MainTheme {
+  name: string
+  intensity: number
+  change: number
+  net_flow: number
+  limit_up_members: LimitUpStock[]
+}
+interface ReplayCanonicalData {
+  summary: MarketSummary | null
+  ladder: LadderData | null
+  brokenData: AnyData
+}
 
 // ========== 配色与工具 ==========
 const SENT_THEME: Record<string, { bg: string; text: string; tag: string; emoji: string }> = {
@@ -140,22 +155,15 @@ function SectionStoryline({
   const luDelta = luPrev !== undefined ? lu - luPrev : 0
   const mb = summary.max_board
 
-  const top1 = useMemo(() => {
-    if (!sectors.length) return null
-    const arr = sectors.map(s => ({
-      name: pickName(s),
-      intensity: pickNum(s, 'intensity'),
-      change: pickNum(s, 'change_rate'),
-    })).filter(s => s.name !== '—').sort((a, b) => b.intensity - a.intensity)
-    return arr[0] || null
-  }, [sectors])
+  const top1 = useMemo(() => buildStorylineThemes(sectors, ladder)[0] || null, [sectors, ladder])
 
   const topLeader = useMemo(() => {
     if (!ladder || !top1) return null
     let best: LimitUpStock | null = null
     Object.values(ladder.tiers).forEach(stocks => {
       stocks.forEach(s => {
-        if (s.first_plate_name === top1.name) {
+        const names = storyNamesFromStock(s)
+        if (names.includes(top1.name)) {
           if (!best || (s.board_count || 1) > (best.board_count || 1)) best = s
         }
       })
@@ -174,7 +182,7 @@ function SectionStoryline({
     Object.values(ladder.tiers).forEach(stocks => {
       stocks.forEach(s => {
         const b = s.board_count || 1
-        if (b >= 1 && b <= 2 && s.first_plate_name === top1.name) n++
+        if (b >= 1 && b <= 2 && storyNamesFromStock(s).includes(top1.name)) n++
       })
     })
     return n
@@ -274,11 +282,7 @@ function BattleFlowCards({ summary, sectors, ladder, brokenData, strategy }: {
   }, [summary])
 
   const step2 = useMemo(() => {
-    const top3 = sectors
-      .map(s => ({ name: pickName(s), intensity: pickNum(s, 'intensity'), change: pickNum(s, 'change_rate') }))
-      .filter(s => s.name !== '—')
-      .sort((a, b) => b.intensity - a.intensity)
-      .slice(0, 3)
+    const top3 = buildStorylineThemes(sectors, ladder).slice(0, 3)
     return {
       title: '主线',
       icon: '🔥',
@@ -288,7 +292,7 @@ function BattleFlowCards({ summary, sectors, ladder, brokenData, strategy }: {
         ? top3.map(t => `${t.name} ${t.intensity.toFixed(0)}`).join(' / ')
         : '无明显合力',
     }
-  }, [sectors])
+  }, [sectors, ladder])
 
   const step3 = useMemo(() => {
     if (!ladder) return { title: '龙头', icon: '👑', metric: '—', metricColor: '#f5222d', desc: '天梯数据加载中' }
@@ -537,12 +541,177 @@ function safeNum(v: unknown, fallback = 0) {
   const n = Number(v)
   return Number.isFinite(n) ? n : fallback
 }
-function pickName(s: SectorRaw) { return s.first_plate_name || s.PlateName || s.concept_name || s.stock_name || s.col2 || '—' }
+function pickName(s: SectorRaw) { return s.name || s.first_plate_name || s.PlateName || s.concept_name || s.stock_name || s.col2 || '—' }
 function pickNum(s: SectorRaw, key: keyof SectorRaw) {
   if (key === 'intensity') return safeNum(s.intensity ?? s.Intensity ?? s.concept_intensity ?? s.col3)
   if (key === 'change_rate') return safeNum(s.change_rate ?? s.ChangePercent ?? s.concept_increase ?? s.col4)
   if (key === 'net_flow') return safeNum(s.net_flow ?? s.MainForce ?? s.concept_net_amount ?? s.col7)
   return safeNum(s[key])
+}
+const STORY_THEME_ALIASES: Array<{ name: string; tokens: string[] }> = [
+  { name: 'AI应用', tokens: ['AI', '人工智能', 'IT服务', '软件', '国产软件', '操作系统', '云游戏', '游戏', '传媒', '广告营销', '互联网', '财税数字化', '电子发票'] },
+  { name: '机器人', tokens: ['机器人', '通用设备', '专用设备', '自动化', '电机', '减速器'] },
+  { name: '算力通信', tokens: ['算力', '通信', '通信设备', '通信服务', '光模块', 'CPO', '数据中心', '服务器', 'PCB'] },
+  { name: '消费电子', tokens: ['消费电子', '元件', '光学光电', '电子'] },
+  { name: '电力能源', tokens: ['电力', '电网设备', '电池', '储能', '新能源'] },
+  { name: '房地产', tokens: ['房地产', '物业', '租售同权'] },
+  { name: '医药医疗', tokens: ['医疗', '医药', '中药', '医疗器械', '医疗服务'] },
+]
+
+function normStoryName(name: string) {
+  return name.replace(/[()\s（）概念板块ⅡⅠ]+/g, '').toLowerCase()
+}
+
+function storyThemeName(rawName: string) {
+  const norm = normStoryName(rawName)
+  if (!norm) return ''
+  const hit = STORY_THEME_ALIASES.find(group =>
+    group.tokens.some(token => {
+      const t = normStoryName(token)
+      return norm === t || norm.includes(t) || t.includes(norm)
+    })
+  )
+  return hit?.name || rawName
+}
+
+function storyNamesFromStock(stock: LimitUpStock): string[] {
+  const names = new Set<string>()
+  if (stock.first_plate_name) names.add(storyThemeName(stock.first_plate_name))
+  ;((stock as AnyData).related_plates || []).forEach((p: unknown) => {
+    if (typeof p === 'string' && p) names.add(storyThemeName(p))
+  })
+  return [...names].filter(Boolean)
+}
+
+function flattenLadderStocks(ladder: LadderData | null): LimitUpStock[] {
+  if (!ladder?.tiers) return []
+  return Object.values(ladder.tiers).flat()
+}
+
+function countLadderStocks(ladder: LadderData | null) {
+  return flattenLadderStocks(ladder).length
+}
+
+function maxBoardFromLadder(ladder: LadderData | null) {
+  return Math.max(0, ...flattenLadderStocks(ladder).map(s => s.board_count || 0))
+}
+
+function normalizeReplayCanonicalData(
+  summary: MarketSummary | null,
+  ladder: LadderData | null,
+  brokenData: AnyData,
+): ReplayCanonicalData {
+  if (!summary) return { summary, ladder, brokenData }
+
+  const nextSummary: MarketSummary = { ...summary }
+  const nextLadder = ladder ? { ...ladder } : null
+  const ladderTotal = countLadderStocks(ladder)
+  if (nextLadder && ladderTotal > 0 && nextLadder.total !== ladderTotal) {
+    nextLadder.total = ladderTotal
+  }
+  if (ladderTotal > 0 && ladderTotal !== nextSummary.limit_up_count) {
+    nextSummary.limit_up_count = ladderTotal
+  }
+
+  const ladderMaxBoard = maxBoardFromLadder(ladder)
+  if (ladderMaxBoard > 0 && ladderMaxBoard !== nextSummary.max_board) {
+    nextSummary.max_board = ladderMaxBoard
+  }
+
+  const brokenTotal = safeNum(brokenData?.total, -1)
+  if (brokenTotal >= 0 && brokenTotal !== nextSummary.broken_count) {
+    nextSummary.broken_count = brokenTotal
+  }
+
+  const denominator = nextSummary.limit_up_count + nextSummary.broken_count
+  if (denominator > 0) {
+    nextSummary.broken_rate = Number((nextSummary.broken_count / denominator * 100).toFixed(2))
+    nextSummary.seal_success_rate = Number((nextSummary.limit_up_count / denominator * 100).toFixed(2))
+  }
+
+  return { summary: nextSummary, ladder: nextLadder, brokenData }
+}
+
+function buildThemesFromStocks(stocks: LimitUpStock[]): MainTheme[] {
+  const m = new Map<string, MainTheme>()
+  stocks.forEach(stock => {
+    storyNamesFromStock(stock).forEach(name => {
+      const current = m.get(name) || { name, intensity: 0, change: 0, net_flow: 0, limit_up_members: [] }
+      const board = stock.board_count || 1
+      const seal = safeNum((stock as AnyData).seal_amount)
+      current.intensity += 100 + board * 30 + Math.log10(Math.max(seal, 1))
+      current.change += safeNum(stock.change_rate)
+      current.net_flow += seal
+      current.limit_up_members.push(stock)
+      m.set(name, current)
+    })
+  })
+  return [...m.values()]
+    .map(t => ({ ...t, change: t.limit_up_members.length ? t.change / t.limit_up_members.length : t.change }))
+    .sort((a, b) => {
+      const memberDiff = b.limit_up_members.length - a.limit_up_members.length
+      if (memberDiff !== 0) return memberDiff
+      return b.intensity - a.intensity
+    })
+}
+
+function buildStorylineThemes(sectors: SectorRaw[], ladder?: LadderData | null): MainTheme[] {
+  const ladderThemes = buildThemesFromStocks(flattenLadderStocks(ladder || null))
+  if (ladderThemes.length > 0) return ladderThemes
+
+  const memberThemes = buildThemesFromStocks(
+    sectors.flatMap(s => Array.isArray(s.limit_up_members) ? s.limit_up_members : [])
+  )
+  if (memberThemes.length > 0) return memberThemes
+
+  return sectors
+    .map(s => ({
+      name: storyThemeName(pickName(s)),
+      intensity: pickNum(s, 'intensity'),
+      change: pickNum(s, 'change_rate'),
+      net_flow: pickNum(s, 'net_flow'),
+      limit_up_members: Array.isArray(s.limit_up_members) ? s.limit_up_members : [],
+    }))
+    .filter(s => s.name !== '—')
+    .reduce<MainTheme[]>((acc, item) => {
+      const found = acc.find(x => x.name === item.name)
+      if (found) {
+        found.intensity += item.intensity
+        found.net_flow += item.net_flow
+        found.change = Math.max(found.change, item.change)
+      } else {
+        acc.push(item)
+      }
+      return acc
+    }, [])
+    .sort((a, b) => b.intensity - a.intensity)
+}
+
+function buildReplayHeadline(summary: MarketSummary, sectors: SectorRaw[], ladder: LadderData | null) {
+  const theme = buildStorylineThemes(sectors, ladder)[0]?.name
+  const themeText = theme ? `，主线观察 ${theme}` : ''
+  return `${summary.sentiment_level || '中性'}，涨停${summary.limit_up_count}家、炸板${summary.broken_count}家、最高${summary.max_board}板${themeText}；以当前页面统一复盘口径为准。`
+}
+
+function ReplayInlineSummary({ summary, sectors, ladder }: {
+  summary: MarketSummary
+  sectors: SectorRaw[]
+  ladder: LadderData | null
+}) {
+  const text = useMemo(() => buildReplayHeadline(summary, sectors, ladder), [summary, sectors, ladder])
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg,#141414,#262626)', borderRadius: 10,
+      padding: '14px 20px', marginBottom: 16, color: '#fff',
+    }}>
+      <RobotOutlined style={{ opacity: 0.5, marginRight: 8 }} />
+      <span style={{ fontSize: 13, opacity: 0.5, marginRight: 8 }}>AI 速报</span>
+      <span style={{ fontSize: 15, fontWeight: 600 }}>{text}</span>
+      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.65, lineHeight: 1.5 }}>
+        基于当前页面统一复盘口径：市场统计、涨停池、炸板池、概念题材
+      </div>
+    </div>
+  )
 }
 
 interface ThemeCycleItem {
@@ -558,16 +727,7 @@ interface ThemeCycleItem {
 }
 
 function SectionThemes({ sectors, ladder }: { sectors: SectorRaw[]; ladder: LadderData | null }) {
-  const top3 = useMemo(() => sectors
-    .map(s => ({
-      name: pickName(s),
-      intensity: pickNum(s, 'intensity'),
-      change: pickNum(s, 'change_rate'),
-      net_flow: pickNum(s, 'net_flow'),
-    }))
-    .filter(s => s.name !== '—')
-    .sort((a, b) => b.intensity - a.intensity)
-    .slice(0, 3), [sectors])
+  const top3 = useMemo(() => buildStorylineThemes(sectors, ladder).slice(0, 3), [sectors, ladder])
 
   // PRD M4B-08：批量获取 Top10 题材的周期阶段
   const [cycles, setCycles] = useState<Record<string, ThemeCycleItem>>({})
@@ -587,10 +747,11 @@ function SectionThemes({ sectors, ladder }: { sectors: SectorRaw[]; ladder: Ladd
     const m = new Map<string, LimitUpStock[]>()
     Object.values(ladder.tiers).forEach((stocks) => {
       stocks.forEach(s => {
-        const key = s.first_plate_name || ''
-        if (!key) return
-        if (!m.has(key)) m.set(key, [])
-        m.get(key)!.push(s)
+        const names = new Set(storyNamesFromStock(s))
+        names.forEach((key) => {
+          if (!m.has(key)) m.set(key, [])
+          m.get(key)!.push(s)
+        })
       })
     })
     return m
@@ -607,7 +768,7 @@ function SectionThemes({ sectors, ladder }: { sectors: SectorRaw[]; ladder: Ladd
         {top3.length === 0 && <Empty description="暂无主线数据" />}
         <Space direction="vertical" size={12} style={{ width: '100%' }}>
           {top3.map((t, i) => {
-            const members = themeMembers.get(t.name) || []
+            const members = t.limit_up_members.length > 0 ? t.limit_up_members : (themeMembers.get(t.name) || [])
             const sortedByBoard = [...members].sort((a, b) => (b.board_count || 1) - (a.board_count || 1))
             const leader = sortedByBoard.find(m => m.is_leader) || sortedByBoard[0]
 
@@ -1179,7 +1340,7 @@ function ScenarioCard({ data, scenarioKey }: { data: NextDayScenario; scenarioKe
   )
 }
 
-function SectionTomorrow({ summary, ladder: _ladder, sectors, date }: {
+function SectionTomorrow({ summary, ladder, sectors, date }: {
   summary: MarketSummary
   ladder: LadderData | null
   sectors: SectorRaw[]
@@ -1205,7 +1366,7 @@ function SectionTomorrow({ summary, ladder: _ladder, sectors, date }: {
     return () => { cancelled = true }
   }, [date])
 
-  const top3Names = useMemo(() => sectors.slice(0, 3).map(pickName), [sectors])
+  const top3Names = useMemo(() => buildStorylineThemes(sectors, ladder).slice(0, 3).map(t => t.name), [sectors, ladder])
 
   return (
     <Card
@@ -1257,13 +1418,14 @@ function SectionTomorrow({ summary, ladder: _ladder, sectors, date }: {
 }
 
 // ========== Section 新增：今日结论条 ==========
-function SectionConclusionBar({ summary, sectors, phase }: {
-  summary: MarketSummary; sectors: SectorRaw[]; phase: AnyData
+function SectionConclusionBar({ summary, sectors, ladder, phase }: {
+  summary: MarketSummary; sectors: SectorRaw[]; ladder: LadderData | null; phase: AnyData
 }) {
   const sent = summary.sentiment_level || '中性'
   const theme = SENT_THEME[sent] || SENT_THEME['中性']
-  const top1 = sectors[0] ? pickName(sectors[0]) : '暂无'
-  const top2 = sectors[1] ? pickName(sectors[1]) : ''
+  const mainThemes = useMemo(() => buildStorylineThemes(sectors, ladder), [sectors, ladder])
+  const top1 = mainThemes[0]?.name || '暂无'
+  const top2 = mainThemes[1]?.name || ''
   const phaseLabel = phase?.phase || '未知'
   const maxB = summary.max_board || 0
   const brRate = summary.broken_rate || 0
@@ -1383,7 +1545,7 @@ function SectionSentimentPhase({ phase }: { phase: AnyData }) {
 // ========== Section 新增：风险雷达 ==========
 function SectionRiskRadar({ summary, brokenData }: { summary: MarketSummary; brokenData: AnyData }) {
   const byReason = brokenData?.by_reason || {}
-  const total = brokenData?.total || 0
+  const total = summary.broken_count || brokenData?.total || 0
   const reasons = Object.entries(byReason).map(([reason, data]: [string, AnyData]) => ({
     reason,
     count: data.count || 0,
@@ -1505,23 +1667,27 @@ export default function ReplayPageV2() {
     setApiMeta([])
 
     const q = `?date=${date}`
+    const safe = async <T,>(name: string, p: Promise<T>, fallback: AnyData | null = null) => {
+      try { return await p } catch (e) { return { ...(fallback || {}), __err: true, __meta: extractErrorMeta(e, name) } as AnyData }
+    }
     Promise.all([
-      fetchApi<MarketSummary>(`/market/summary${q}`),
-      fetchApi<LadderData>(`/market/ladder${q}`).catch(() => null),
-      fetchApi<{ data: SectorRaw[] }>(`/market/sectors${q}`).catch(() => ({ data: [] })),
-      fetchApi<RelayResp>(`/market/ladder-relay${q}`).catch(() => null),
-      fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow${q}`).catch(() => ({ data: [] })),
-      fetchApi<AnyData>('/market/sentiment-phase').catch(() => null),
-      fetchApi<AnyData>(`/analysis/broken-cases${q}`).catch(() => null),
-      fetchApi<AnyData>(`/market/next-day-strategy${q}`).catch(() => null),
+      safe('市场总览', fetchApi<MarketSummary>(`/market/summary${q}`)),
+      safe('连板天梯', fetchApi<LadderData>(`/market/ladder${q}`)),
+      safe('题材', fetchApi<{ data: SectorRaw[] }>(`/market/sectors${q}`), { data: [] }),
+      safe('接力', fetchApi<RelayResp>(`/market/ladder-relay${q}`)),
+      safe('资金', fetchApi<{ data: CapitalItem[] }>(`/market/capital-flow${q}`), { data: [] }),
+      safe('情绪', fetchApi<AnyData>('/market/sentiment-phase')),
+      safe('炸板', fetchApi<AnyData>(`/analysis/broken-cases${q}`)),
+      safe('明日策略', fetchApi<AnyData>(`/market/next-day-strategy${q}`)),
     ])
       .then(([s, l, sec, r, cf, ph, br, st]) => {
         const validSummary = s && (s as AnyData).data_status !== 'unavailable' && (s as AnyData).limit_up_count != null ? s : null
         const validLadder = l && (l as AnyData).data_status !== 'unavailable' && (l as AnyData).tiers ? l : null
-        setSummary(validSummary); setLadder(validLadder); setSectors(sec?.data || []); setRelay(r)
+        const canonical = normalizeReplayCanonicalData(validSummary, validLadder, br)
+        setSummary(canonical.summary); setLadder(canonical.ladder); setSectors(sec?.data || []); setRelay(r)
         setCapitalFlow(cf?.data || [])
-        setPhase(ph); setBrokenData(br); setStrategy(st)
-        setApiMeta(extractMetaList([
+        setPhase(ph); setBrokenData(canonical.brokenData); setStrategy(st)
+        const okMeta = extractMetaList([
           { name: '市场总览', resp: s },
           { name: '连板天梯', resp: l },
           { name: '题材', resp: sec },
@@ -1530,7 +1696,11 @@ export default function ReplayPageV2() {
           { name: '情绪', resp: ph },
           { name: '炸板', resp: br },
           { name: '明日策略', resp: st },
-        ]))
+        ])
+        const errMeta = [s, l, sec, r, cf, ph, br, st]
+          .map((x: AnyData) => x?.__meta as ApiMeta | undefined)
+          .filter((m): m is ApiMeta => Boolean(m))
+        setApiMeta([...okMeta, ...errMeta])
       })
       .catch(() => setErr('复盘接口不可用，当前不展示复盘数据。'))
       .finally(() => setLoading(false))
@@ -1563,7 +1733,7 @@ export default function ReplayPageV2() {
       {isMock && <Alert type="warning" showIcon message="接口标记为 mock" description="当前复盘页存在 mock 标记，请确认后端数据源。" style={{ marginBottom: 12 }} />}
       <MetaStrip items={apiMeta} />
 
-      <SectionConclusionBar summary={summary} sectors={sectors} phase={phase} />
+      <SectionConclusionBar summary={summary} sectors={sectors} ladder={ladder} phase={phase} />
 
       {/* 横向导航（规范 Section 4.1） */}
       <Tabs
@@ -1582,11 +1752,7 @@ export default function ReplayPageV2() {
       />
 
       <div data-feature="AI-Headline" data-feature-name="AI 一句话速报">
-        <AIInlineSummary
-          endpoint="/ai/headline"
-          params={{ date: selectedDate }}
-          metaText="基于当日 KPL 实时/收盘口径：市场统计、涨停池、炸板池、概念题材"
-        />
+        <ReplayInlineSummary summary={summary} sectors={sectors} ladder={ladder} />
       </div>
       <div data-feature="Storyline" data-feature-name="今日故事线（三幕叙事）">
         <SectionStoryline summary={summary} sectors={sectors} ladder={ladder} relay={relay} />

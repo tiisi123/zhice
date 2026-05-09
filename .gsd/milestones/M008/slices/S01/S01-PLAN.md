@@ -24,6 +24,6 @@ Fix visible data unit defects and prevent recurrence through API and UI tests.
   - Files: `prototype/tests/api/test_board_replay_route.py`
   - Verify: `pytest tests/api/test_board_replay_route.py`.
 
-- [ ] **T05: Record verification result in slice summary** `est:10m`
+- [x] **T05: Record verification result in slice summary** `est:10m`
   - Files: `.gsd/milestones/M008/slices/S01/S01-SUMMARY.md`
   - Verify: summary lists commands already run and current residual risk.

@@ -5,7 +5,7 @@ import math
 from dataclasses import asdict
 from datetime import datetime, timedelta
 
-from packages.backtest.engine import BACKTEST_STOCKS, STOCK_NAMES, BacktestResult
+from packages.backtest.engine import BACKTEST_STOCKS, STOCK_NAMES, BacktestDataUnavailable, BacktestResult
 
 logger = logging.getLogger(__name__)
 
@@ -302,13 +302,15 @@ def _load_live_limit_up_data(years: int) -> dict[str, list[dict]] | None:
 
 def run_board_backtest(
     sub_strategy: str = "首板",
-    mode: str = "sample",
+    mode: str = "auto",
     years: int = 1,
 ) -> dict:
     config = SUB_STRATEGY_CONFIG.get(sub_strategy, SUB_STRATEGY_CONFIG["首板"])
     strategy_name = f"打板策略-{sub_strategy}"
 
-    if mode == "sample":
+    normalized_mode = (mode or "auto").strip().lower()
+
+    if normalized_mode == "sample":
         trading_days = _generate_sample_trading_days(20)
         stock_data = _generate_sample_limit_up_data(sorted(BACKTEST_STOCKS), trading_days)
         data_mode = "sample"
@@ -322,11 +324,7 @@ def run_board_backtest(
             data_mode = "live"
             data_source = "kpl_limit_up"
         else:
-            trading_days = _generate_sample_trading_days(20)
-            stock_data = _generate_sample_limit_up_data(sorted(BACKTEST_STOCKS), trading_days)
-            data_mode = "sample"
-            data_source = "sample_engine"
-            logger.info("live KPL data unavailable, falling back to sample mode")
+            raise BacktestDataUnavailable("KPL 实盘涨停池不可用，打板回测未使用演示数据自动兜底；可显式选择 mode=sample 查看演示。")
 
     trades, curve = _simulate_board_trades(
         stock_data,

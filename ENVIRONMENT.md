@@ -66,9 +66,17 @@ At least one AI provider key is required for AI Agent features.
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `ANTHROPIC_API_KEY` | Anthropic Claude API key | |
-| `ANTHROPIC_BASE_URL` | Anthropic API base URL | `https://api.anthropic.com` |
-| `OPENAI_API_KEY` | OpenAI API key | |
+| `PREFERRED_AI_API_KEY` | Product AI key for OpenAI-compatible gateways | |
+| `PREFERRED_AI_BASE_URL` | Product AI gateway base URL | `https://cc.maya.today/api/v1` |
+| `PREFERRED_AI_CHAT_MODEL` | Product chat model | `gpt-4o` |
+| `PREFERRED_AI_FAST_MODEL` | Product fast model | `gpt-4o-mini` |
+| `DEEPSEEK_API_KEY` | Product DeepSeek API key | |
+| `DEEPSEEK_BASE_URL` | DeepSeek API base URL | `https://api.deepseek.com` |
+| `ZHICE_AI_ANTHROPIC_API_KEY` | Product-scoped Anthropic Claude API key | |
+| `ZHICE_AI_ANTHROPIC_BASE_URL` | Product-scoped Anthropic API base URL | `https://api.anthropic.com` |
+| `ZHICE_AI_OPENAI_API_KEY` | Product-scoped OpenAI API key | |
+
+The product backend intentionally ignores generic `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` so local IDE/agent API credentials are not consumed by 智策.
 
 ## SMTP (Optional)
 

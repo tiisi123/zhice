@@ -21,7 +21,8 @@ _DEFAULT_HEADERS = {
 class KplHistoryClient:
     """KPL history endpoint (apphis) client.
 
-    KPL authenticates via DeviceID in POST body, not HTTP cookies.
+    KPL history calls require both DeviceID form data and the operator-managed
+    mobile Cookie captured from daban_pc.
     """
 
     def __init__(
@@ -42,14 +43,22 @@ class KplHistoryClient:
     def _headers(self, host_key: str = "history") -> dict:
         h = _DEFAULT_HEADERS.copy()
         h["Host"] = HOST_MAP.get(host_key, HOST_MAP["history"])
+        if self.cookie:
+            h["Cookie"] = self.cookie
         return h
 
+    def _has_credentials(self) -> bool:
+        return bool(self.cookie or (self.token and self.user_id))
+
     def _post(self, url: str, data: dict, host_key: str = "history") -> dict:
+        if not self._has_credentials():
+            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
             if not resp.text.strip():
-                logger.warning(
+                log = logger.info if data.get("a") in {"HomeThemeList"} else logger.warning
+                log(
                     "KPL history empty body: endpoint=%s a=%s",
                     url,
                     data.get("a", ""),
@@ -106,17 +115,14 @@ class KplHistoryClient:
     # 概念精选（历史）
     def get_concept_selected_history(self, trade_date: str, index: int = 0) -> dict:
         data = self._base_params(
-            a="ConceptSelected",
-            c="HisHomeDingPan",
-            Day=trade_date,
-            IsZZ="0",
-            TSZB="0",
-            IsKZZType="0",
-            TSZB_Type="0",
-            filterType="",
-            Order="0",
+            a="RealRankingInfo",
+            c="ZhiShuRanking",
+            Date=trade_date,
+            Type="1",
+            ZSType="7",
+            Order="1",
             Index=str(index),
-            st="20",
+            st="30",
         )
         return self._post(KPL_HISTORY_HOST, data, "history")
 

@@ -170,6 +170,7 @@ export interface ApiMeta {
   mock: boolean
   message?: string
   name?: string
+  trade_date?: string
 }
 
 export interface BoardTradingInput {

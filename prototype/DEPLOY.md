@@ -200,7 +200,7 @@ $EDITOR .env            # 业主用 vim/nano 编辑，填入下表三类值
 | ----------------- | --------------------------------------------------------------------------------- | --------------------------------------------------- |
 | 启动校验三件套    | `ZHICE_JWT_SECRET` / `ZHICE_ADMIN_PASSWORD` / `DATABASE_URL`                      | 缺一启动直接 RuntimeError（T02 已锁定）             |
 | MySQL             | `MYSQL_ROOT_PASSWORD`                                                             | `DATABASE_URL` 用 `mysql+pymysql://root:${MYSQL_ROOT_PASSWORD}@zhice-db:3306/zhice` |
-| 业务密钥          | `KPL_USER_ID/TOKEN/DEVICE_ID`、`TUSHARE_TOKEN`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`SMTP_*` | 至少配一个 AI key + 一个数据源 token                |
+| 业务密钥          | `KPL_USER_ID/TOKEN/DEVICE_ID`、`TUSHARE_TOKEN`、`PREFERRED_AI_API_KEY`、`DEEPSEEK_API_KEY`、`ZHICE_AI_OPENAI_API_KEY`、`ZHICE_AI_ANTHROPIC_API_KEY`、`SMTP_*` | 至少配一个 AI key + 一个数据源 token                |
 | Caddy 域名        | `STAGING_DOMAIN`                                                                  | 例 `staging.zhice.example.com`；本地测试可用 `:80`  |
 
 生成示例：

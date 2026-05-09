@@ -35,17 +35,20 @@ function StockIdentity({ data }: { data: AnyData }) {
       <div style={{ marginTop: 12, display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 15 }}>
         <span>涨幅 <b style={{ fontSize: 22 }}>{cr >= 0 ? '+' : ''}{cr.toFixed(2)}%</b></span>
         {bc > 0 && <span>连板 <b style={{ fontSize: 22 }}>{bc}</b> 板</span>}
-        <span>封板 <b>{data.time || '—'}</b></span>
+        <span>{data.match_source ? '封板' : '最新交易日'} <b>{data.time || data.history?.daily?.at?.(-1)?.date || '—'}</b></span>
       </div>
     </div>
   )
 }
 
 function ReasonCard({ data }: { data: AnyData }) {
+  const inPool = Boolean(data.intraday?.short_pool?.in_pool)
   return (
-    <Card title={<span><ThunderboltOutlined style={{ color: '#fa8c16' }} /> 涨停解码</span>} size="small" style={{ marginBottom: 16 }}>
+    <Card title={<span><ThunderboltOutlined style={{ color: '#fa8c16' }} /> 短线状态</span>} size="small" style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 14, lineHeight: 2 }}>
-        <div><b>核心催化：</b>{data.reason || '—'}</div>
+        <div><b>盘中来源：</b><Tag color="blue">KPL 实时池</Tag><Tag>{data.intraday?.trade_date || '—'}</Tag></div>
+        <div><b>短线池状态：</b>{inPool ? <Tag color="red">{data.kline_label}</Tag> : <Tag>未进入涨停/炸板/热股池</Tag>}</div>
+        <div><b>核心催化：</b>{data.reason || (inPool ? '—' : '无短线池催化，转看 Tushare 历史行情/基本面。')}</div>
         <div>
           <b>所属题材：</b>
           {data.themes?.related_plates?.length > 0
@@ -56,6 +59,37 @@ function ReasonCard({ data }: { data: AnyData }) {
         </div>
         <div><b>主题材：</b><Tag color="orange">{data.themes?.main_theme || '—'}</Tag> · 热度 <b style={{ color: '#f5222d' }}>{data.themes?.hot_score || 0}</b></div>
       </div>
+    </Card>
+  )
+}
+
+function SourceCard({ data }: { data: AnyData }) {
+  const daily = data.history?.daily || []
+  const latest = daily[daily.length - 1] || {}
+  return (
+    <Card title="数据来源与可分析范围" size="small" style={{ marginBottom: 16 }}>
+      <Space direction="vertical" size={6} style={{ width: '100%' }}>
+        {(data.data_sources || []).map((s: AnyData) => (
+          <div key={`${s.name}-${s.source}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+            <span>{s.name}</span>
+            <span><Tag color={s.source === 'tushare' ? 'purple' : 'blue'}>{s.source}</Tag><Tag>{s.status}</Tag></span>
+          </div>
+        ))}
+        <div style={{ fontSize: 12, color: '#666' }}>
+          任何 A 股代码均可分析；历史行情、估值和基本资料走 Tushare，盘中实时行情走 KPL 全市场排行，涨停/炸板/热股是 KPL 事件标签。
+        </div>
+        {data.intraday?.realtime?.stock_code && (
+          <div style={{ fontSize: 12, color: '#666' }}>
+            KPL 实时：现价 {data.intraday.realtime.price ?? '—'}，涨幅 {data.intraday.realtime.change_rate ?? '—'}%，
+            换手 {data.intraday.realtime.turnover_ratio ?? '—'}%，额 {data.intraday.realtime.amount ? (data.intraday.realtime.amount / 1e8).toFixed(2) + '亿' : '—'}
+          </div>
+        )}
+        {latest.date && (
+          <div style={{ fontSize: 12, color: '#666' }}>
+            Tushare 最新交易日：{latest.date}，收盘 {latest.close ?? '—'}，涨跌幅 {latest.pct_chg ?? '—'}%
+          </div>
+        )}
+      </Space>
     </Card>
   )
 }
@@ -286,6 +320,7 @@ export default function StockPage() {
           <StockIdentity data={data} />
           <Row gutter={16}>
             <Col xs={24} lg={12}>
+              <SourceCard data={data} />
               <ReasonCard data={data} />
               <CapitalCard cf={data.capital_flow} />
             </Col>

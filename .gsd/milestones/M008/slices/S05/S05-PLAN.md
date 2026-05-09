@@ -18,6 +18,12 @@ Make the installed GSD CLI and repository scripts agree so plan -> slice -> task
   - Files: `scripts/gsd-recover-stuck.sh`
   - Verify: script calls `gsd headless recover/query`, not removed top-level `doctor/recover`.
 
-- [ ] **T04: Import M008 projection into GSD DB** `est:15m`
+- [x] **T04: Import M008 projection into GSD DB** `est:15m`
   - Files: `.gsd/milestones/M008/**`
   - Verify: `gsd headless recover` imports nonzero M/S/T and query sees active milestone.
+
+## Verification
+
+- `gsd headless --timeout 60000 recover` -> `recovered 1M/5S/21T hierarchy`
+- `gsd headless --timeout 60000 query --output-format json` -> returned active M008 state without blockers.
+- `make gsd-preflight` could not be executed in the current Windows shell because `make` is not installed; the underlying PowerShell/headless GSD commands were run directly.

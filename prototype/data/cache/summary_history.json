@@ -78,5 +78,61 @@
     "seal_success_rate": 84.95,
     "max_board": 4,
     "sentiment_level": "回暖"
+  },
+  "2026-05-06": {
+    "limit_up_count": 101,
+    "broken_count": 30,
+    "broken_rate": 22.9,
+    "seal_success_rate": 77.1,
+    "max_board": 4,
+    "sentiment_level": "回暖"
+  },
+  "2026-05-07": {
+    "limit_up_count": 101,
+    "broken_count": 30,
+    "broken_rate": 22.9,
+    "seal_success_rate": 77.1,
+    "max_board": 4,
+    "sentiment_level": "回暖"
+  },
+  "2026-04-29": {
+    "limit_up_count": 100,
+    "broken_count": 23,
+    "broken_rate": 18.7,
+    "seal_success_rate": 81.3,
+    "max_board": 3,
+    "sentiment_level": "回暖"
+  },
+  "2026-04-22": {
+    "limit_up_count": 55,
+    "broken_count": 21,
+    "broken_rate": 27.63,
+    "seal_success_rate": 72.37,
+    "max_board": 4,
+    "sentiment_level": "中性"
+  },
+  "2026-05-30": {
+    "limit_up_count": 101,
+    "broken_count": 30,
+    "broken_rate": 22.9,
+    "seal_success_rate": 77.1,
+    "max_board": 4,
+    "sentiment_level": "回暖"
+  },
+  "2026-05-08": {
+    "limit_up_count": 100,
+    "broken_count": 31,
+    "broken_rate": 23.66,
+    "seal_success_rate": 76.34,
+    "max_board": 5,
+    "sentiment_level": "回暖"
+  },
+  "2026-05-09": {
+    "limit_up_count": 98,
+    "broken_count": 17,
+    "broken_rate": 14.78,
+    "seal_success_rate": 85.22,
+    "max_board": 4,
+    "sentiment_level": "高潮"
   }
 }

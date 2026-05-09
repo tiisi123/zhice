@@ -37,6 +37,8 @@ venv/
 target/
 vendor/
 *.log
+.codex-logs/
+~$*.docx
 coverage/
 .cache/
 tmp/

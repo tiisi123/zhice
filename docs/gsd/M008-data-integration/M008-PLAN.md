@@ -19,10 +19,11 @@ Unify zhiceV1 data sources, remove silent mock/sample analysis, add field-level 
 
 ## Current Environment Finding
 
-`gsd` CLI is not installed in the current shell. `gsd auto` cannot run until the CLI is installed and available on `PATH`.
+`gsd-pi@2.80.0` is installed as `gsd`. Headless recover/query runs in this repository; plain `make gsd-preflight` still depends on a local `make` binary being present.
 
 ## Acceptance
 
 - P0 screenshot percentage issue fixed and covered by tests.
 - Preflight reports GSD readiness clearly.
 - Each slice has a durable plan file with verifiable tasks.
+- S06 PRD closure adds auto/live defaults, metadata integration tests, explicit sample/static statuses, and bootstrap scripts.

@@ -20,8 +20,9 @@ const YEARS_OPTIONS = [
 ]
 
 const MODE_OPTIONS = [
-  { label: '演示数据', value: 'sample' },
+  { label: '自动', value: 'auto' },
   { label: '实盘数据', value: 'live' },
+  { label: '演示数据', value: 'sample' },
 ]
 
 const tradeCols = [
@@ -63,7 +64,7 @@ const tradeCols = [
 
 export default function BoardBacktestPanel() {
   const [subStrategy, setSubStrategy] = useState('首板')
-  const [mode, setMode] = useState('sample')
+  const [mode, setMode] = useState('auto')
   const [years, setYears] = useState(1)
   const [data, setData] = useState<BoardBacktestResult | null>(null)
   const [raw, setRaw] = useState<AnyData>(null)
@@ -148,7 +149,7 @@ export default function BoardBacktestPanel() {
             value={mode}
             onChange={setMode}
             options={MODE_OPTIONS}
-            style={{ width: 110 }}
+            style={{ width: 120 }}
           />
           {YEARS_OPTIONS.map(({ label, value }) => (
             <Button

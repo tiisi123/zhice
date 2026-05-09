@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 
 from pydantic import field_validator, model_validator
@@ -9,6 +10,8 @@ from pydantic_settings import BaseSettings
 _logger = logging.getLogger("zhice.api.config")
 
 _ALLOWED_DB_SCHEMES = {"mysql", "mysql+pymysql"}
+_PROTOTYPE_ROOT = Path(__file__).resolve().parents[2]
+_REPO_ROOT = _PROTOTYPE_ROOT.parent
 
 
 class Settings(BaseSettings):
@@ -56,9 +59,12 @@ class Settings(BaseSettings):
     preferred_ai_base_url: str = "https://cc.maya.today/api/v1"
     preferred_ai_chat_model: str = "gpt-4o"
     preferred_ai_fast_model: str = "gpt-4o-mini"
-    openai_api_key: str = ""
-    anthropic_api_key: str = ""
-    anthropic_base_url: str = "https://api.anthropic.com"
+    # Product-scoped AI keys. Do not read generic OPENAI_API_KEY /
+    # ANTHROPIC_API_KEY here: local IDEs and coding agents often use those
+    # names, and the zhice product runtime must not consume or mutate them.
+    zhice_ai_openai_api_key: str = ""
+    zhice_ai_anthropic_api_key: str = ""
+    zhice_ai_anthropic_base_url: str = "https://api.anthropic.com"
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_chat_model: str = "deepseek-v4-pro"
@@ -102,7 +108,15 @@ class Settings(BaseSettings):
                 return False
         return bool(v)
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+    model_config = {
+        # Dev commands usually run from prototype/, while operators may place
+        # shared secrets such as TUSHARE_TOKEN in the repository root .env.
+        # Load both, with prototype/.env taking precedence for API-specific
+        # overrides.
+        "env_file": (_REPO_ROOT / ".env", _PROTOTYPE_ROOT / ".env"),
+        "env_file_encoding": "utf-8",
+        "extra": "ignore",
+    }
 
     @model_validator(mode="after")
     def validate_required_secrets(self) -> "Settings":

@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智策·AI投研与策略中枢</title>
+    <script src="vendor/react.production.min.js"></script>
+    <script src="vendor/react-dom.production.min.js"></script>
+    <script src="vendor/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #262626; overflow: hidden; }
+        .app { display: flex; height: 100vh; }
+        .sider { width: 220px; background: #001529; color: #fff; display: flex; flex-direction: column; }
+        .sider-logo { height: 56px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .sider-logo i { margin-right: 8px; color: #1677ff; }
+        .menu { flex: 1; overflow-y: auto; padding: 12px 0; }
+        .menu-group { padding: 8px 16px; }
+        .menu-title { font-size: 12px; color: rgba(255,255,255,0.45); margin-bottom: 8px; padding-left: 8px; }
+        .menu-item { display: flex; align-items: center; padding: 10px 16px; cursor: pointer; border-radius: 6px; margin-bottom: 2px; font-size: 14px; transition: all 0.2s; }
+        .menu-item:hover { background: rgba(255,255,255,0.08); }
+        .menu-item.active { background: #1677ff; }
+        .menu-item i { width: 20px; margin-right: 10px; }
+        .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .header { height: 56px; background: #fff; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; }
+        .header h1 { font-size: 16px; font-weight: 500; }
+        .header-btns { display: flex; gap: 12px; }
+        .header-btn { background: none; border: 1px solid #d9d9d9; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+        .content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+        .card { background: #fff; border-radius: 8px; margin-bottom: 16px; overflow: hidden; }
+        .card-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        .card-body { padding: 20px; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .ai-badge { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th, td { padding: 12px 8px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        th { background: #fafafa; font-weight: 500; color: #595959; }
+        tr:hover { background: #f5f5f5; }
+        .up { color: #f5222d; }
+        .down { color: #52c41a; }
+        .section-title { font-size: 16px; font-weight: 600; margin: 24px 0 16px; }
+        .progress { height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
+        .progress-bar { height: 100%; border-radius: 3px; }
+        .chat-btn { position: fixed; bottom: 24px; right: 24px; width: 50px; height: 50px; border-radius: 50%; background: linear-gradient(135deg, #667eea, #764ba2); border: none; color: #fff; font-size: 20px; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); z-index: 1000; }
+        .chat-panel { position: fixed; bottom: 84px; right: 24px; width: 360px; height: 480px; background: #fff; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 1000; display: flex; flex-direction: column; }
+        .chat-header { padding: 16px; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; display: flex; justify-content: space-between; align-items: center; }
+        .chat-msgs { flex: 1; overflow-y: auto; padding: 16px; }
+        .chat-msg { margin-bottom: 12px; }
+        .chat-msg.user { text-align: right; }
+        .bubble { display: inline-block; max-width: 80%; padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.5; }
+        .chat-msg.ai .bubble { background: #f5f5f5; }
+        .chat-msg.user .bubble { background: #1677ff; color: #fff; }
+        .chat-input { padding: 12px; border-top: 1px solid #f0f0f0; display: flex; gap: 8px; }
+        .chat-input input { flex: 1; padding: 10px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; }
+        .chat-input button { padding: 8px 16px; background: #1677ff; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+        .search-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.45); z-index: 1001; display: flex; justify-content: center; padding-top: 100px; }
+        .search-box { width: 560px; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 16px 48px rgba(0,0,0,0.2); }
+        .search-input { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; gap: 12px; }
+        .search-input input { flex: 1; border: none; font-size: 16px; outline: none; }
+        .search-list { max-height: 400px; overflow-y: auto; }
+        .search-item { padding: 12px 20px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+        .search-item:hover { background: #f5f5f5; }
+        .search-item span { font-weight: 500; }
+        .search-item small { color: #8c8c8c; margin-left: auto; font-size: 12px; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 6px; }
+        .tag-red { background: #fff1f0; color: #cf1322; }
+        .tag-orange { background: #fff7e6; color: #d46b08; }
+        .signal-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            var root = document.getElementById('root') || document.body;
+            root.innerHTML = '<div style="padding:24px;font-family:Arial,sans-serif;color:#b00020;background:#fff3f3;border:1px solid #ffcdd2;margin:24px;border-radius:8px;line-height:1.6"><b>页面脚本错误</b><br>' + String(message) + '<br>line: ' + lineno + ', col: ' + colno + '<pre style="white-space:pre-wrap">' + (error && error.stack ? error.stack : '') + '</pre></div>';
+        };
+    </script>    <script>
+        var useState = React.useState;
+        var useEffect = React.useEffect;
+        var useRef = React.useRef;
+        var antdLib = window.antd || {};
+        var ConfigProvider = antdLib.ConfigProvider || function(props) { return React.createElement(React.Fragment, null, props.children); };
+        var Input = antdLib.Input || function(props) { return React.createElement('input', props); };
+        var Button = antdLib.Button || function(props) {
+            var nextProps = Object.assign({}, props);
+            delete nextProps.type;
+            delete nextProps.size;
+            nextProps.className = (nextProps.className ? nextProps.className + ' ' : '') + 'header-btn';
+            return React.createElement('button', nextProps, props.children);
+        };
+        var Card = antdLib.Card || function(props) {
+            return React.createElement('div', Object.assign({}, props, { className: ((props && props.className) ? props.className + ' ' : '') + 'card' }), props.children);
+        };
+        var Tag = antdLib.Tag || function(props) {
+            return React.createElement('span', Object.assign({}, props, { className: 'tag' }), props.children);
+        };
+        var Badge = antdLib.Badge || function(props) {
+            return React.createElement('span', Object.assign({}, props, { className: 'tag' }), props.count);
+        };
+
+        var mockData = {
+            date: '2026-05-07',
+            market: { sh300: '3,892.42', sh300Change: -0.32, cy50: '1,824.56', cy50Change: 1.28 },
+            sentiment: 52,
+            limitUpStocks: [
+                { code: '301536', name: '天工股份', reason: 'AI算力+一季报预增', time: '09:25:03', board: '首板' },
+                { code: '688xxx', name: '中科曙光', reason: '算力基础设施', time: '09:31:22', board: '2连板' },
+                { code: '002230', name: '科大讯飞', reason: '大模型+业绩超预期', time: '09:42:15', board: '首板' },
+                { code: '301487', name: '世纪天鸿', reason: 'AI教育', time: '09:55:08', board: '首板' },
+                { code: '300750', name: '宁德时代', reason: '固态电池', time: '10:15:33', board: '首板' }
+            ],
+            hotSectors: [
+                { name: 'AI算力', change: 4.52, strength: 95 },
+                { name: '半导体', change: 3.21, strength: 88 },
+                { name: '新能源汽车', change: 2.15, strength: 75 },
+                { name: '军工', change: 1.89, strength: 68 }
+            ],
+            etfCategories: [
+                { name: '宽基ETF', count: 8, change: 0.45, color: '#1890ff' },
+                { name: '行业ETF', count: 12, change: 1.82, color: '#52c41a' },
+                { name: '主题ETF', count: 15, change: 2.31, color: '#722ed1' },
+                { name: '跨境ETF', count: 5, change: -0.23, color: '#fa8c16' },
+                { name: '债券ETF', count: 4, change: 0.08, color: '#13c2c2' },
+                { name: '商品ETF', count: 3, change: -0.56, color: '#eb2f96' },
+                { name: '货币ETF', count: 2, change: 0.02, color: '#8c8c8c' },
+                { name: '策略ETF', count: 6, change: 1.15, color: '#f5222d' }
+            ],
+            signals: [
+                { code: '512480', name: '半导体ETF', signal: '启动', confidence: 92, change: 3.21, reason: '国产替代加速' },
+                { code: '515980', name: '人工智能ETF', signal: '接力', confidence: 88, change: 4.52, reason: '资金大幅流入' },
+                { code: '159915', name: '创业板ETF', signal: '加速', confidence: 85, change: 2.18, reason: '北向资金净买入' },
+                { code: '512760', name: '芯片ETF', signal: '退潮', confidence: 78, change: -1.23, reason: '短期获利了结' },
+                { code: '515050', name: '5GETF', signal: '启动', confidence: 82, change: 2.05, reason: '5.5G商用启动' }
+            ],
+            strategies: [
+                { name: '趋势动量策略', desc: '追涨强势ETF，顺势而为', roi: 18.5, sharpe: 2.1, maxDraw: -8.2, winRate: 68 },
+                { name: '均值回归策略', desc: '超跌买入，高估卖出', roi: 12.3, sharpe: 1.8, maxDraw: -5.6, winRate: 72 },
+                { name: '行业轮动策略', desc: '根据经济周期切换行业', roi: 15.8, sharpe: 1.9, maxDraw: -6.8, winRate: 65 },
+                { name: '定投策略', desc: '定期定额，平滑成本', roi: 9.2, sharpe: 1.2, maxDraw: -12.5, winRate: 58 }
+            ]
+        };
+
+        var titles = {
+            dashboard: '收盘复盘', intraday: '盘中监控', theme: '题材工坊',
+            etf: 'ETF行情复盘', signals: 'ETF轮动信号', portfolio: 'ETF策略组合',
+            research: '标的研究', strategy: '策略工坊'
+        };
+
+        var menuGroups = [
+            { title: '短线', items: [
+                { key: 'dashboard', label: '收盘复盘', icon: 'fa-chart-line' },
+                { key: 'intraday', label: '盘中监控', icon: 'fa-tv' }
+            ]},
+            { title: '热点', items: [
+                { key: 'theme', label: '题材工坊', icon: 'fa-fire' }
+            ]},
+            { title: 'ETF轮动', items: [
+                { key: 'etf', label: '行情复盘', icon: 'fa-chart-pie' },
+                { key: 'signals', label: '轮动信号', icon: 'fa-bolt' },
+                { key: 'portfolio', label: '策略组合', icon: 'fa-cogs' }
+            ]},
+            { title: '工具', items: [
+                { key: 'research', label: '标的研究', icon: 'fa-search' },
+                { key: 'strategy', label: '策略工坊', icon: 'fa-brain' }
+            ]}
+        ];
+
+        function App() {
+            var pageState = useState('dashboard');
+            var currentPage = pageState[0];
+            var setCurrentPage = pageState[1];
+            var chatState = useState(false);
+            var chatOpen = chatState[0];
+            var setChatOpen = chatState[1];
+            var searchState = useState(false);
+            var searchOpen = searchState[0];
+            var setSearchOpen = searchState[1];
+
+            useEffect(function() {
+                var handler = function(e) {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                        e.preventDefault();
+                        setSearchOpen(true);
+                    }
+                    if (e.key === 'Escape') {
+                        setSearchOpen(false);
+                        setChatOpen(false);
+                    }
+                };
+                window.addEventListener('keydown', handler);
+                return function() { window.removeEventListener('keydown', handler); };
+            }, []);
+
+            function renderPage() {
+                var pages = {
+                    dashboard: DashboardPage,
+                    intraday: DashboardPage,
+                    theme: ThemePage,
+                    etf: EtfReplayPage,
+                    signals: EtfSignalsPage,
+                    portfolio: EtfPortfolioPage,
+                    research: ResearchPage,
+                    strategy: StrategyPage
+                };
+                var Page = pages[currentPage] || DashboardPage;
+                return React.createElement(Page, { key: currentPage });
+            }
+
+            return React.createElement('div', { className: 'app' },
+                React.createElement('div', { className: 'sider' },
+                    React.createElement('div', { className: 'sider-logo' },
+                        React.createElement('i', { className: 'fas fa-chart-line' }),
+                        '智策'
+                    ),
+                    React.createElement('div', { className: 'menu' },
+                        menuGroups.map(function(group) {
+                            return React.createElement('div', { key: group.title, className: 'menu-group' },
+                                React.createElement('div', { className: 'menu-title' }, group.title),
+                                group.items.map(function(item) {
+                                    return React.createElement('div', {
+                                        key: item.key,
+                                        className: 'menu-item ' + (currentPage === item.key ? 'active' : ''),
+                                        onClick: function() { setCurrentPage(item.key); }
+                                    },
+                                        React.createElement('i', { className: 'fas ' + item.icon }),
+                                        item.label
+                                    );
+                                })
+                            );
+                        })
+                    )
+                ),
+                React.createElement('div', { className: 'main' },
+                    React.createElement('div', { className: 'header' },
+                        React.createElement('h1', null, titles[currentPage] || '智策'),
+                        React.createElement('div', { className: 'header-btns' },
+                            React.createElement('button', { className: 'header-btn', onClick: function() { setSearchOpen(true); } },
+                                React.createElement('i', { className: 'fas fa-search' }),
+                                '搜索 ',
+                                React.createElement('span', { style: { fontSize: 11, opacity: 0.7 } }, 'Ctrl+K')
+                            ),
+                            React.createElement('button', { className: 'header-btn' },
+                                React.createElement('i', { className: 'fas fa-calendar' }),
+                                mockData.date
+                            )
+                        )
+                    ),
+                    React.createElement('div', { className: 'content' },
+                        renderPage()
+                    )
+                ),
+                React.createElement('button', { className: 'chat-btn', onClick: function() { setChatOpen(!chatOpen); } },
+                    React.createElement('i', { className: 'fas fa-comment-dots' })
+                ),
+                chatOpen && React.createElement(ChatPanel, { onClose: function() { setChatOpen(false); } }),
+                searchOpen && React.createElement(SearchModal, { onClose: function() { setSearchOpen(false); } })
+            );
+        }
+
+        function DashboardPage() {
+            var chartRef = useRef(null);
+
+            useEffect(function() {
+                if (chartRef.current && window.echarts) {
+                    var chart = window.echarts.init(chartRef.current);
+                    chart.setOption({
+                        tooltip: { trigger: 'axis' },
+                        xAxis: { type: 'category', data: ['09:30', '10:00', '10:30', '11:00', '11:30', '13:00', '13:30', '14:00', '14:30', '15:00'] },
+                        yAxis: { type: 'value' },
+                        series: [{
+                            data: [3880, 3890, 3895, 3898, 3892, 3885, 3888, 3882, 3885, 3892],
+                            type: 'line', smooth: true,
+                            areaStyle: { color: 'rgba(22, 119, 255, 0.1)' },
+                            lineStyle: { color: '#1677ff' },
+                            itemStyle: { color: '#1677ff' }
+                        }],
+                        grid: { left: 50, right: 20, top: 20, bottom: 30 }
+                    });
+                }
+            }, []);
+
+            return React.createElement('div', null,
+                React.createElement('div', { className: 'grid-3' },
+                    React.createElement(Card, null,
+                        React.createElement('div', { style: { textAlign: 'center', padding: '12px 0' } },
+                            React.createElement('div', { style: { fontSize: 28, fontWeight: 600 } }, mockData.market.sh300),
+                            React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginTop: 4 } }, '沪深300'),
+                            React.createElement('div', { className: 'down', style: { fontSize: 14, marginTop: 8 } }, mockData.market.sh300Change + '%')
+                        )
+                    ),
+                    React.createElement(Card, null,
+                        React.createElement('div', { style: { textAlign: 'center', padding: '12px 0' } },
+                            React.createElement('div', { style: { fontSize: 28, fontWeight: 600 } }, mockData.market.cy50),
+                            React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginTop: 4 } }, '创业板50'),
+                            React.createElement('div', { className: 'up', style: { fontSize: 14, marginTop: 8 } }, '+' + mockData.market.cy50Change + '%')
+                        )
+                    ),
+                    React.createElement(Card, null,
+                        React.createElement('div', { style: { textAlign: 'center', padding: '12px 0' } },
+                            React.createElement('div', { style: { fontSize: 28, fontWeight: 600 } }, mockData.sentiment),
+                            React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginTop: 4 } }, '市场情绪'),
+                            React.createElement(Tag, { color: 'warning', style: { marginTop: 8 } }, '中性')
+                        )
+                    )
+                ),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '📈 指数走势'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { ref: chartRef, style: { height: 280 } })
+                    )
+                ),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '📖 今日复盘叙事'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 } },
+                            ['09:30 开局平淡，AI算力率先启动', '10:15 半导体板块跟进', '11:30 指数冲高，量能不足', '14:00 获利盘涌出', '15:00 尾盘企稳'].map(function(item, i) {
+                                return React.createElement('div', { key: i, style: { padding: 12, background: '#fafafa', borderRadius: 6, fontSize: 13 } },
+                                    React.createElement('div', { style: { fontWeight: 600, marginBottom: 6, color: '#1677ff' } }, '第' + (i + 1) + '幕'),
+                                    item
+                                );
+                            })
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'grid-2' },
+                    React.createElement(Card, null,
+                        React.createElement('div', { className: 'card-header' }, '🎯 五步作战流'),
+                        React.createElement('div', { className: 'card-body' },
+                            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                                ['大盘定位', '情绪确认', '主线识别', '标的选择', '买卖时机'].map(function(step, i) {
+                                    return React.createElement(React.Fragment, { key: step },
+                                        i > 0 && React.createElement('i', { className: 'fas fa-arrow-right', style: { color: '#d9d9d9' } }),
+                                        React.createElement('div', {
+                                            style: {
+                                                padding: '8px 12px',
+                                                background: i === 2 ? '#e6f4ff' : '#fafafa',
+                                                borderRadius: 6,
+                                                fontSize: 13,
+                                                color: i === 2 ? '#1677ff' : '#595959',
+                                                fontWeight: i === 2 ? 500 : 400
+                                            }
+                                        }, step)
+                                    );
+                                })
+                            )
+                        )
+                    ),
+                    React.createElement(Card, null,
+                        React.createElement('div', { className: 'card-header' }, '📊 市场情绪仪表盘'),
+                        React.createElement('div', { className: 'card-body', style: { display: 'flex', justifyContent: 'space-around', alignItems: 'center' } },
+                            React.createElement('div', { style: { textAlign: 'center' } },
+                                React.createElement('div', { style: { fontSize: 36, fontWeight: 600, color: '#faad14' } }, '52'),
+                                React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c' } }, '情绪指数')
+                            ),
+                            [{ label: '涨停', value: 68, color: '#f5222d' }, { label: '跌停', value: 12, color: '#52c41a' }, { label: '炸板', value: 18, color: '#faad14' }].map(function(item) {
+                                return React.createElement('div', { key: item.label, style: { textAlign: 'center' } },
+                                    React.createElement('div', { style: { fontSize: 20, fontWeight: 600, color: item.color } }, item.value),
+                                    React.createElement('div', { style: { fontSize: 12, color: '#8c8c8c' } }, item.label)
+                                );
+                            })
+                        )
+                    )
+                ),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' },
+                        React.createElement('span', { className: 'ai-badge' }, 'AI'),
+                        ' 智能复盘摘要'
+                    ),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('p', { style: { fontSize: 14, lineHeight: 1.8 } },
+                            '今日市场维持震荡格局，AI算力板块成为唯一主线。开盘后算力概念率先发力，',
+                            React.createElement('span', { style: { fontWeight: 600 } }, '半导体'),
+                            '板块跟进，带动科技整体走强。午后获利盘涌出，指数小幅回落，但整体承接较好。'
+                        ),
+                        React.createElement('p', { style: { marginTop: 12 } },
+                            '情绪方面，今日涨停68家，跌停12家，炸板率适中，市场情绪维持',
+                            React.createElement('span', { style: { color: '#faad14', fontWeight: 600 } }, '中性偏暖'),
+                            '。预计明日AI算力方向仍将延续，可关注回调机会。'
+                        )
+                    )
+                ),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '🔴 涨停板复盘'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('table', null,
+                            React.createElement('thead', null,
+                                React.createElement('tr', null,
+                                    ['股票代码', '股票名称', '涨停原因', '涨停时间', '连板'].map(function(h) {
+                                        return React.createElement('th', { key: h }, h);
+                                    })
+                                )
+                            ),
+                            React.createElement('tbody', null,
+                                mockData.limitUpStocks.map(function(stock) {
+                                    return React.createElement('tr', { key: stock.code },
+                                        React.createElement('td', null, stock.code),
+                                        React.createElement('td', null, React.createElement('span', { style: { fontWeight: 500, color: '#f5222d' } }, stock.name)),
+                                        React.createElement('td', null, React.createElement(Tag, { color: 'red' }, stock.reason)),
+                                        React.createElement('td', null, stock.time),
+                                        React.createElement('td', null, React.createElement(Tag, { color: stock.board === '首板' ? 'default' : 'orange' }, stock.board))
+                                    );
+                                })
+                            )
+                        )
+                    )
+                )
+            );
+        }
+
+        function ThemePage() {
+            var chartRef = useRef(null);
+
+            useEffect(function() {
+                if (chartRef.current && window.echarts) {
+                    var chart = window.echarts.init(chartRef.current);
+                    chart.setOption({
+                        tooltip: { trigger: 'item' },
+                        series: [{
+                            type: 'graph', layout: 'force', symbolSize: 50,
+                            data: mockData.hotSectors.map(function(s) { return { name: s.name, value: s.change }; }),
+                            links: [], categories: [{ name: '题材' }],
+                            label: { show: true, formatter: '{b}', fontSize: 13, color: '#333' },
+                            roam: true,
+                            force: { repulsion: 180, edgeLength: 80 }
+                        }]
+                    });
+                }
+            }, []);
+
+            return React.createElement('div', null,
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '🔥 题材气泡图'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { style: { display: 'flex', gap: 16 } },
+                            React.createElement('div', { ref: chartRef, style: { flex: 1, height: 350 } }),
+                            React.createElement('div', { style: { width: 220 } },
+                                React.createElement('div', { style: { fontSize: 13, fontWeight: 500, marginBottom: 12 } }, '题材列表'),
+                                mockData.hotSectors.map(function(s) {
+                                    return React.createElement('div', {
+                                        key: s.name,
+                                        style: { padding: '10px 12px', marginBottom: 8, background: '#fafafa', borderRadius: 6, display: 'flex', justifyContent: 'space-between' }
+                                    },
+                                        React.createElement('span', { style: { fontWeight: 500 } }, s.name),
+                                        React.createElement('span', { className: 'up' }, '+' + s.change + '%')
+                                    );
+                                })
+                            )
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'section-title' }, '📋 题材详情'),
+                React.createElement('div', { className: 'grid-2' },
+                    mockData.hotSectors.map(function(s) {
+                        return React.createElement(Card, { key: s.name },
+                            React.createElement('div', { className: 'card-body' },
+                                React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 12 } },
+                                    React.createElement('span', { style: { fontSize: 16, fontWeight: 600 } }, s.name),
+                                    React.createElement('span', { className: 'up', style: { fontSize: 16, fontWeight: 600 } }, '+' + s.change + '%')
+                                ),
+                                React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginBottom: 12 } }, '强度: ' + s.strength),
+                                React.createElement('div', { className: 'progress' },
+                                    React.createElement('div', { className: 'progress-bar', style: { width: s.strength + '%', background: '#f5222d' } })
+                                )
+                            )
+                        );
+                    })
+                )
+            );
+        }
+
+        function EtfReplayPage() {
+            return React.createElement('div', null,
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' },
+                        React.createElement('span', { className: 'ai-badge' }, 'AI'),
+                        ' ETF市场概览'
+                    ),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('p', { style: { fontSize: 14, lineHeight: 1.8 } },
+                            '今日ETF市场整体活跃，跨境ETF小幅调整。行业ETF表现亮眼，半导体、人工智能相关ETF涨幅居前。'
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'section-title' }, '📊 八大品类行情'),
+                React.createElement('div', { className: 'grid-4' },
+                    mockData.etfCategories.map(function(cat) {
+                        return React.createElement(Card, { key: cat.name },
+                            React.createElement('div', { className: 'card-body', style: { textAlign: 'center' } },
+                                React.createElement('div', { style: { width: 48, height: 48, borderRadius: '50%', background: cat.color, margin: '0 auto 12px', opacity: 0.15 } }),
+                                React.createElement('div', { style: { fontSize: 15, fontWeight: 500, marginBottom: 4 } }, cat.name),
+                                React.createElement('div', { style: { fontSize: 24, fontWeight: 600, color: cat.change > 0 ? '#f5222d' : '#52c41a' } },
+                                    (cat.change > 0 ? '+' : '') + cat.change + '%'
+                                ),
+                                React.createElement('div', { style: { fontSize: 12, color: '#8c8c8c', marginTop: 4 } }, cat.count + '只ETF')
+                            )
+                        );
+                    })
+                ),
+                React.createElement('div', { className: 'grid-2' },
+                    React.createElement(Card, null,
+                        React.createElement('div', { className: 'card-header' }, '💰 资金流向TOP5'),
+                        React.createElement('div', { className: 'card-body' },
+                            React.createElement('table', null,
+                                React.createElement('tbody', null,
+                                    [['人工智能ETF', '+12.8亿', '515980'], ['半导体ETF', '+8.5亿', '512480'], ['芯片ETF', '+6.2亿', '512760'], ['医疗ETF', '+3.1亿', '512170'], ['新能源ETF', '+2.4亿', '516160']].map(function(row, i) {
+                                        return React.createElement('tr', { key: i },
+                                            React.createElement('td', null, row[0]),
+                                            React.createElement('td', { style: { color: '#f5222d', fontWeight: 500 } }, row[1]),
+                                            React.createElement('td', { style: { color: '#8c8c8c' } }, row[2])
+                                        );
+                                    })
+                                )
+                            )
+                        )
+                    ),
+                    React.createElement(Card, null,
+                        React.createElement('div', { className: 'card-header' }, '⚠️ 折溢价监控'),
+                        React.createElement('div', { className: 'card-body' },
+                            React.createElement('table', null,
+                                React.createElement('tbody', null,
+                                    [['纳斯达克ETF', '溢价 2.35%', 'red'], ['标普500ETF', '溢价 1.82%', 'orange'], ['恒生科技ETF', '折价 -0.45%', 'green'], ['日经ETF', '溢价 0.98%', 'orange'], ['越南ETF', '折价 -0.21%', 'green']].map(function(row, i) {
+                                        return React.createElement('tr', { key: i },
+                                            React.createElement('td', null, row[0]),
+                                            React.createElement('td', null, React.createElement(Tag, { color: row[2] }, row[1]))
+                                        );
+                                    })
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        }
+
+        function EtfSignalsPage() {
+            var signalTypes = {
+                '启动': { color: '#52c41a', icon: 'fa-play-circle' },
+                '接力': { color: '#1677ff', icon: 'fa-exchange-alt' },
+                '退潮': { color: '#faad14', icon: 'fa-arrow-down' },
+                '加速': { color: '#f5222d', icon: 'fa-bolt' }
+            };
+
+            return React.createElement('div', null,
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '📊 信号仪表盘'),
+                    React.createElement('div', { className: 'card-body', style: { display: 'flex', justifyContent: 'space-around', padding: '20px 0' } },
+                        Object.entries(signalTypes).map(function(entry) {
+                            var name = entry[0];
+                            var info = entry[1];
+                            return React.createElement('div', { key: name, style: { textAlign: 'center' } },
+                                React.createElement('div', {
+                                    style: {
+                                        width: 60, height: 60, borderRadius: '50%',
+                                        background: info.color + '20',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        margin: '0 auto 12px'
+                                    }
+                                },
+                                    React.createElement('i', { className: 'fas ' + info.icon, style: { fontSize: 24, color: info.color } })
+                                ),
+                                React.createElement('div', { style: { fontWeight: 500 } }, name)
+                            );
+                        })
+                    )
+                ),
+                React.createElement('div', { className: 'section-title' }, '🎯 今日轮动信号'),
+                mockData.signals.map(function(sig) {
+                    var sigInfo = signalTypes[sig.signal] || { color: '#999', icon: 'fa-question' };
+                    return React.createElement(Card, { key: sig.code, style: { marginBottom: 12 } },
+                        React.createElement('div', { className: 'card-body' },
+                            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 16 } },
+                                React.createElement('div', {
+                                    style: {
+                                        width: 60, height: 60, borderRadius: 8,
+                                        background: sigInfo.color + '15',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        flexDirection: 'column'
+                                    }
+                                },
+                                    React.createElement('div', { className: 'signal-dot', style: { background: sigInfo.color } }),
+                                    React.createElement('span', { style: { fontSize: 11, fontWeight: 500, color: sigInfo.color } }, sig.signal)
+                                ),
+                                React.createElement('div', { style: { flex: 1 } },
+                                    React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 } },
+                                        React.createElement('span', { style: { fontWeight: 600, fontSize: 15 } }, sig.name),
+                                        React.createElement('span', { style: { color: '#8c8c8c', fontSize: 12 } }, sig.code),
+                                        React.createElement('span', { className: sig.change > 0 ? 'up' : 'down', style: { fontWeight: 600 } },
+                                            (sig.change > 0 ? '+' : '') + sig.change + '%'
+                                        )
+                                    ),
+                                    React.createElement('div', { style: { fontSize: 13, color: '#595959' } }, sig.reason)
+                                ),
+                                React.createElement('div', { style: { textAlign: 'center' } },
+                                    React.createElement('div', { style: { fontSize: 24, fontWeight: 600, color: '#1677ff' } }, sig.confidence),
+                                    React.createElement('div', { style: { fontSize: 12, color: '#8c8c8c' } }, '置信度%')
+                                ),
+                                React.createElement(Tag, { color: 'blue' }, '今日')
+                            )
+                        )
+                    );
+                }),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '🔍 四层筛选漏斗'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+                            ['宏观择时(10)', '行业轮动(25)', '动量反转(30)', '风控优化(5)'].map(function(step, i) {
+                                return React.createElement(React.Fragment, { key: step },
+                                    i > 0 && React.createElement('i', { className: 'fas fa-chevron-right', style: { color: '#d9d9d9' } }),
+                                    React.createElement('div', {
+                                        style: {
+                                            flex: i === 0 ? 1 : i === 1 ? 2 : i === 2 ? 3 : 1,
+                                            padding: '10px 14px',
+                                            background: '#e6f4ff',
+                                            borderRadius: 6,
+                                            fontSize: 13,
+                                            textAlign: 'center'
+                                        }
+                                    }, step)
+                                );
+                            })
+                        )
+                    )
+                )
+            );
+        }
+
+        function EtfPortfolioPage() {
+            return React.createElement('div', null,
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' },
+                        React.createElement('span', { className: 'ai-badge' }, 'AI'),
+                        ' 因子权重配置'
+                    ),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { className: 'grid-4' },
+                            [
+                                { name: '动量因子', weight: 35, color: '#f5222d' },
+                                { name: '价值因子', weight: 25, color: '#1677ff' },
+                                { name: '质量因子', weight: 20, color: '#52c41a' },
+                                { name: '风险因子', weight: 20, color: '#faad14' }
+                            ].map(function(f) {
+                                return React.createElement('div', { key: f.name, style: { textAlign: 'center' } },
+                                    React.createElement('div', { style: { fontSize: 28, fontWeight: 600, color: f.color } }, f.weight + '%'),
+                                    React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginTop: 4 } }, f.name),
+                                    React.createElement('div', { className: 'progress', style: { marginTop: 8 } },
+                                        React.createElement('div', { className: 'progress-bar', style: { width: f.weight + '%', background: f.color } })
+                                    )
+                                );
+                            })
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'section-title' }, '📈 ETF评分排名'),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('table', null,
+                            React.createElement('thead', null,
+                                React.createElement('tr', null,
+                                    ['排名', 'ETF名称', '代码', '综合评分', '动量', '趋势', '换手率', '操作'].map(function(h) {
+                                        return React.createElement('th', { key: h }, h);
+                                    })
+                                )
+                            ),
+                            React.createElement('tbody', null,
+                                [
+                                    ['1', '半导体ETF', '512480', 95, 98, 92, '15.2%'],
+                                    ['2', '人工智能ETF', '515980', 92, 96, 88, '18.5%'],
+                                    ['3', '芯片ETF', '512760', 88, 85, 90, '12.8%'],
+                                    ['4', '创业板ETF', '159915', 85, 82, 86, '8.5%'],
+                                    ['5', '5GETF', '515050', 82, 80, 84, '10.2%']
+                                ].map(function(row) {
+                                    return React.createElement('tr', { key: row[0] },
+                                        React.createElement('td', null, React.createElement(Badge, { count: row[0], style: { backgroundColor: '#1677ff' } })),
+                                        React.createElement('td', null, row[1]),
+                                        React.createElement('td', null, row[2]),
+                                        React.createElement('td', null, React.createElement('span', { style: { color: '#f5222d', fontWeight: 600 } }, row[3])),
+                                        row.slice(4, 7).map(function(cell, i) {
+                                            return React.createElement('td', { key: i }, cell);
+                                        }),
+                                        React.createElement('td', null, React.createElement(Button, { size: 'small', type: 'primary' }, '配置'))
+                                    );
+                                })
+                            )
+                        )
+                    )
+                )
+            );
+        }
+
+        function ResearchPage() {
+            return React.createElement('div', null,
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '🔍 个股研究'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { style: { display: 'flex', gap: 16, marginBottom: 20 } },
+                            React.createElement(Input, { placeholder: '输入股票代码或名称', style: { flex: 1 } }),
+                            React.createElement(Button, { type: 'primary' }, '搜索')
+                        ),
+                        React.createElement('div', { style: { textAlign: 'center', padding: '40px 0', color: '#8c8c8c' } },
+                            '请输入股票代码进行查询'
+                        )
+                    )
+                ),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' },
+                        React.createElement('span', { className: 'ai-badge' }, 'AI'),
+                        ' AI综合研判'
+                    ),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { style: { padding: '20px', background: '#fafafa', borderRadius: 8, textAlign: 'center', color: '#8c8c8c' } },
+                            '输入股票代码后，AI将提供综合研判分析'
+                        )
+                    )
+                )
+            );
+        }
+
+        function StrategyPage() {
+            return React.createElement('div', null,
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' },
+                        React.createElement('span', { className: 'ai-badge' }, 'AI'),
+                        ' AI推荐策略'
+                    ),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { className: 'grid-2' },
+                            mockData.strategies.map(function(s) {
+                                return React.createElement('div', { key: s.name, style: { padding: 20, border: '1px solid #f0f0f0', borderRadius: 8 } },
+                                    React.createElement('div', { style: { fontSize: 16, fontWeight: 600, marginBottom: 8 } }, s.name),
+                                    React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginBottom: 16 } }, s.desc),
+                                    React.createElement('div', { style: { display: 'flex', gap: 16 } },
+                                        [['收益率', s.roi + '%'], ['夏普比率', s.sharpe], ['最大回撤', s.maxDraw + '%'], ['胜率', s.winRate + '%']].map(function(item, i) {
+                                            return React.createElement('div', { key: item[0], style: { textAlign: 'center' } },
+                                                React.createElement('div', { style: { fontSize: 16, fontWeight: 600, color: '#1677ff' } }, item[1]),
+                                                React.createElement('div', { style: { fontSize: 11, color: '#8c8c8c' } }, item[0])
+                                            );
+                                        })
+                                    )
+                                );
+                            })
+                        )
+                    )
+                ),
+                React.createElement(Card, null,
+                    React.createElement('div', { className: 'card-header' }, '📊 回测指标看板'),
+                    React.createElement('div', { className: 'card-body' },
+                        React.createElement('div', { className: 'grid-4' },
+                            [
+                                { label: '年化收益率', value: '15.8%', trend: 'up' },
+                                { label: '夏普比率', value: '1.95', trend: 'up' },
+                                { label: '最大回撤', value: '-8.2%', trend: 'down' },
+                                { label: '胜率', value: '68%', trend: 'up' }
+                            ].map(function(item) {
+                                return React.createElement('div', { key: item.label, style: { textAlign: 'center', padding: 16 } },
+                                    React.createElement('div', { style: { fontSize: 28, fontWeight: 600, color: item.trend === 'up' ? '#f5222d' : '#52c41a' } }, item.value),
+                                    React.createElement('div', { style: { fontSize: 13, color: '#8c8c8c', marginTop: 4 } }, item.label)
+                                );
+                            })
+                        )
+                    )
+                )
+            );
+        }
+
+        function ChatPanel(props) {
+            var messagesState = useState([
+                { type: 'ai', text: '您好！我是智策AI助手，可以帮您分析市场、解读行情、推荐ETF策略。请问有什么可以帮您？' }
+            ]);
+            var messages = messagesState[0];
+            var setMessages = messagesState[1];
+            var inputState = useState('');
+            var input = inputState[0];
+            var setInput = inputState[1];
+
+            function handleSend() {
+                if (!input.trim()) return;
+                setMessages(function(prev) { return prev.concat({ type: 'user', text: input }); });
+                var text = input;
+                setInput('');
+                setTimeout(function() {
+                    var reply = '好的，我来帮您分析这个问题。根据当前市场数据...';
+                    if (text.includes('AI') || text.includes('算力')) {
+                        reply = 'AI算力板块今日表现强势，涨幅达4.52%，强度评分95分。建议关注回调机会，可关注芯片ETF(512480)和人工智能ETF(515980)。';
+                    } else if (text.includes('ETF')) {
+                        reply = '当前ETF轮动信号显示，半导体ETF处于「启动」信号，置信度92%；人工智能ETF处于「接力」信号，置信度88%。';
+                    } else if (text.includes('推荐')) {
+                        reply = '根据当前市场环境，AI推荐关注以下ETF：1. 半导体ETF(512480) 启动信号 2. 人工智能ETF(515980) 接力信号 3. 创业板ETF(159915) 加速信号。';
+                    }
+                    setMessages(function(prev) { return prev.concat({ type: 'ai', text: reply }); });
+                }, 800);
+            }
+
+            return React.createElement('div', { className: 'chat-panel' },
+                React.createElement('div', { className: 'chat-header' },
+                    React.createElement('span', null,
+                        React.createElement('i', { className: 'fas fa-robot', style: { marginRight: 8 } }),
+                        '智策AI助手'
+                    ),
+                    React.createElement('button', {
+                        onClick: props.onClose,
+                        style: { background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 18 }
+                    }, '×')
+                ),
+                React.createElement('div', { className: 'chat-msgs' },
+                    messages.map(function(m, i) {
+                        return React.createElement('div', { key: i, className: 'chat-msg ' + m.type },
+                            React.createElement('div', { className: 'bubble' }, m.text)
+                        );
+                    })
+                ),
+                React.createElement('div', { className: 'chat-input' },
+                    React.createElement('input', {
+                        value: input,
+                        onChange: function(e) { setInput(e.target.value); },
+                        onKeyDown: function(e) { if (e.key === 'Enter') handleSend(); },
+                        placeholder: '输入您的问题...'
+                    }),
+                    React.createElement('button', { onClick: handleSend }, '发送')
+                )
+            );
+        }
+
+        function SearchModal(props) {
+            var queryState = useState('');
+            var query = queryState[0];
+            var setQuery = queryState[1];
+            var searchData = [
+                { name: 'AI算力', type: '题材', icon: 'fa-fire' },
+                { name: '半导体ETF', type: 'ETF', code: '512480', icon: 'fa-chart-line' },
+                { name: '人工智能ETF', type: 'ETF', code: '515980', icon: 'fa-chart-line' },
+                { name: '收盘复盘', type: '功能', icon: 'fa-chart-bar' },
+                { name: '轮动信号', type: '功能', icon: 'fa-bolt' },
+                { name: '芯片ETF', type: 'ETF', code: '512760', icon: 'fa-chart-line' }
+            ];
+            var results = query ? searchData.filter(function(s) { return s.name.includes(query) || (s.code && s.code.includes(query)); }) : searchData;
+
+            return React.createElement('div', { className: 'search-overlay', onClick: props.onClose },
+                React.createElement('div', { className: 'search-box', onClick: function(e) { e.stopPropagation(); } },
+                    React.createElement('div', { className: 'search-input' },
+                        React.createElement('i', { className: 'fas fa-search', style: { color: '#8c8c8c', fontSize: 18 } }),
+                        React.createElement('input', {
+                            autoFocus: true,
+                            value: query,
+                            onChange: function(e) { setQuery(e.target.value); },
+                            placeholder: '搜索股票、ETF、题材或功能...'
+                        }),
+                        React.createElement('span', { style: { fontSize: 12, color: '#8c8c8c' } }, 'ESC关闭')
+                    ),
+                    React.createElement('div', { className: 'search-list' },
+                        results.map(function(item, i) {
+                            return React.createElement('div', { key: i, className: 'search-item' },
+                                React.createElement('i', { className: 'fas ' + item.icon, style: { color: '#8c8c8c' } }),
+                                React.createElement('span', null, item.name),
+                                item.code && React.createElement('small', null, item.code),
+                                React.createElement('small', null, item.type)
+                            );
+                        })
+                    )
+                )
+            );
+        }
+
+        try {
+            ReactDOM.createRoot(document.getElementById('root')).render(
+                React.createElement(App)
+            );
+        } catch (error) {
+            window.onerror(error && error.message ? error.message : error, '', 0, 0, error);
+        }
+    </script>
+</body>
+</html>

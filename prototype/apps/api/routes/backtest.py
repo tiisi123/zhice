@@ -19,7 +19,7 @@ _VALID_SUB_STRATEGIES = ("首板", "二板", "龙头")
 
 @router.get("/board-strategy")
 def board_strategy(
-    mode: str = Query("sample"),
+    mode: str = Query("auto", description="auto/live/sample"),
     sub_strategy: str = Query("首板"),
     years: int = Query(1),
 ):
@@ -36,20 +36,28 @@ def board_strategy(
             source=data.get("data_source", "sample_engine"),
             status=status,
             mock=mock_flag,
+            data_source=data.get("data_source", "sample_engine"),
+            data_mode=data.get("data_mode", "sample"),
+            as_of=data.get("as_of", ""),
+            fallback_reason=data.get("fallback_reason", ""),
         )
     except BacktestDataUnavailable as e:
         return wrap_contract(
             None,
-            source="sample_engine",
+            source="kpl_limit_up",
             status="unavailable",
             mock=False,
             message=str(e),
+            data_source="kpl_limit_up",
+            data_mode="unavailable",
+            as_of="",
+            fallback_reason="live_data_unavailable",
         )
 
 
 @router.get("/etf-rotation")
 def etf_rotation_backtest(
-    mode: str = Query("sample"),
+    mode: str = Query("auto", description="auto/live/sample"),
     years: int = Query(1),
 ):
     try:
@@ -60,12 +68,20 @@ def etf_rotation_backtest(
             source=data.get("data_source", "sample_engine"),
             status=status,
             mock=mock_flag,
+            data_source=data.get("data_source", "sample_engine"),
+            data_mode=data.get("data_mode", "sample"),
+            as_of=data.get("as_of", ""),
+            fallback_reason=data.get("fallback_reason", ""),
         )
     except BacktestDataUnavailable as e:
         return wrap_contract(
             None,
-            source="sample_engine",
+            source="tushare_fund_daily",
             status="unavailable",
             mock=False,
             message=str(e),
+            data_source="tushare_fund_daily",
+            data_mode="unavailable",
+            as_of="",
+            fallback_reason="live_data_unavailable",
         )

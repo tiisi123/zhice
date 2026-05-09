@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional
+import re
 
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
@@ -57,20 +58,69 @@ _backtest_agent = BacktestAnalystAgent()
 _board_trading_agent = BoardTradingAgent()
 _etf_rotation_agent = EtfRotationAgent()
 
+_LLM_UNAVAILABLE_MARKERS = (
+    "AI 模型暂时不可用",
+    "已停止返回演示模板",
+)
+
+
+def _llm_unavailable(text: str) -> bool:
+    return any(marker in text for marker in _LLM_UNAVAILABLE_MARKERS)
+
+
+def _llm_contract_status(text: str) -> tuple[str, str]:
+    if _llm_unavailable(text):
+        return "unavailable", "AI 模型暂时不可用，请检查产品侧 AI 网关状态。"
+    return "real", ""
+
+
+def _headline_cache_key(trade_date: str, summary: dict) -> str:
+    return "|".join([
+        trade_date,
+        str(summary.get("limit_up_count", 0)),
+        str(summary.get("broken_count", 0)),
+        str(summary.get("max_board", 0)),
+        str(summary.get("sentiment_level", "")),
+    ])
+
+
+def _pick_headline_theme(sectors: list[dict], limit_up: list[dict]) -> str:
+    if limit_up:
+        counts: dict[str, int] = {}
+        for stock in limit_up:
+            names = []
+            if stock.get("first_plate_name"):
+                names.append(str(stock.get("first_plate_name")))
+            related = stock.get("related_plates") or []
+            if isinstance(related, list):
+                names.extend(str(item) for item in related if item)
+            for name in names:
+                counts[name] = counts.get(name, 0) + 1
+        if counts:
+            return sorted(counts.items(), key=lambda item: item[1], reverse=True)[0][0]
+    if sectors:
+        top = sectors[0]
+        return str(top.get("name") or top.get("PlateName") or top.get("concept_name") or "")
+    return ""
+
+
+def _build_deterministic_headline(summary: dict, sectors: list[dict], limit_up: list[dict]) -> str:
+    sent = summary.get("sentiment_level", "中性")
+    limit_up_count = int(summary.get("limit_up_count") or 0)
+    broken_count = int(summary.get("broken_count") or 0)
+    max_board = int(summary.get("max_board") or 0)
+    theme = _pick_headline_theme(sectors, limit_up)
+    theme_text = f"，主线观察 {theme}" if theme else ""
+    return (
+        f"{sent}，涨停{limit_up_count}家、炸板{broken_count}家、最高{max_board}板{theme_text}；"
+        "以当前 KPL 涨停池/炸板池统计为准。"
+    )
+
 
 @router.get("/headline")
 def headline(date: Optional[str] = Query(None)):
     """AI 一句话速报（无需 quota，内存缓存按日去重）。"""
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
-    cached = _headline_cache.get_or_none(trade_date)
-    if cached is not None:
-        return wrap_contract(
-            cached,
-            source="kpl+llm",
-            status="real",
-            trade_date=trade_date,
-            headline=cached,
-        )
     try:
         kpl_stats = _kpl.get_market_statistics(trade_date)
         limit_up = _kpl.get_limit_up(trade_date)
@@ -78,21 +128,28 @@ def headline(date: Optional[str] = Query(None)):
         sectors = _kpl.get_concept_selected(trade_date)
         summary = build_market_summary(kpl_stats, limit_up, broken)
         summary["trade_date"] = trade_date
+        cache_key = _headline_cache_key(trade_date, summary)
+        cached = _headline_cache.get_or_none(cache_key)
+        if cached is not None:
+            return wrap_contract(
+                cached,
+                source="kpl",
+                status="real",
+                trade_date=trade_date,
+                headline=cached,
+                summary=summary,
+            )
 
-        from apps.ai.context_builders.market_context import build_market_context
-        from apps.ai.prompts.templates import MARKET_HEADLINE
-        from apps.ai.agents.llm_client import llm
-
-        context = build_market_context(summary, limit_up, broken, sectors)
-        text = llm.fast_chat(MARKET_HEADLINE.format(context=context))
-        text = text.strip().strip("「」""''")
-        _headline_cache.put(trade_date, text)
+        text = _build_deterministic_headline(summary, sectors, limit_up)
+        _headline_cache.put(cache_key, text)
         return wrap_contract(
             text,
-            source="kpl+llm",
+            source="kpl",
             status="real",
+            message="AI 速报关键数字由 KPL 市场概览统一生成，避免与页面指标不一致。",
             trade_date=trade_date,
             headline=text,
+            summary=summary,
         )
     except Exception:
         try:
@@ -104,18 +161,15 @@ def headline(date: Optional[str] = Query(None)):
             sectors = _kpl.get_concept_selected(trade_date)
             if sectors:
                 top_sector = (sectors[0].get("PlateName") or sectors[0].get("concept_name") or "")
-            sent = s.get("sentiment_level", "中性")
-            text = f"{sent}，涨停{s.get('limit_up_count',0)}家，最高{s.get('max_board',0)}板"
-            if top_sector:
-                text += f"，{top_sector}领涨"
-            _headline_cache.put(trade_date, text)
+            text = _build_deterministic_headline(s, sectors, limit_up)
             return wrap_contract(
                 text,
                 source="kpl",
                 status="fallback",
-                message="LLM 不可用，已降级为 KPL 规则速报",
+                message="速报已降级为 KPL 规则生成",
                 trade_date=trade_date,
                 headline=text,
+                summary=s,
             )
         except Exception:
             return wrap_contract(
@@ -139,26 +193,29 @@ def replay_report(date: Optional[str] = Query(None), user: dict = Depends(consum
         summary = build_market_summary(kpl_stats, limit_up, broken)
         summary["trade_date"] = trade_date
         report = _replay_agent.generate_report(summary, limit_up, broken, sectors)
+        status, message = _llm_contract_status(report)
         # 自动归档
         try:
-            execute(
-                "INSERT INTO reports_archive(author_id, author_name, trade_date, kind, title, content, summary) VALUES (?,?,?,?,?,?,?)",
-                (
-                    user["id"],
-                    user.get("nickname") or "智策官方",
-                    trade_date,
-                    "replay",
-                    f"{trade_date} 收盘复盘",
-                    report,
-                    f"涨停{summary.get('limit_up_count',0)} 炸板{summary.get('broken_count',0)} 情绪{summary.get('sentiment_level','')}",
-                ),
-            )
+            if status == "real":
+                execute(
+                    "INSERT INTO reports_archive(author_id, author_name, trade_date, kind, title, content, summary) VALUES (?,?,?,?,?,?,?)",
+                    (
+                        user["id"],
+                        user.get("nickname") or "智策官方",
+                        trade_date,
+                        "replay",
+                        f"{trade_date} 收盘复盘",
+                        report,
+                        f"涨停{summary.get('limit_up_count',0)} 炸板{summary.get('broken_count',0)} 情绪{summary.get('sentiment_level','')}",
+                    ),
+                )
         except Exception:
             pass
         return wrap_contract(
             report,
             source="kpl+llm",
-            status="real",
+            status=status,
+            message=message,
             trade_date=trade_date,
             summary=summary,
             report=report,
@@ -174,6 +231,36 @@ def replay_report(date: Optional[str] = Query(None), user: dict = Depends(consum
 def stock_insight(code: str, date: Optional[str] = Query(None)):
     try:
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
+        from apps.api.routes.stock import stock_detail
+
+        detail = stock_detail(code, date=trade_date)
+        detail_data = detail.get("data") if isinstance(detail, dict) else None
+        if detail_data and detail_data.get("found"):
+            history = detail_data.get("history") or {}
+            latest = (history.get("daily") or [{}])[-1] if history.get("daily") else {}
+            short_pool = ((detail_data.get("intraday") or {}).get("short_pool") or {})
+            themes = detail_data.get("themes", {}).get("related_plates", [])
+            prompt_stock = {
+                "stock_code": code,
+                "stock_name": detail_data.get("name", code),
+                "change_rate": detail_data.get("change_rate", 0),
+                "board_count": detail_data.get("board_count", 0),
+                "time": detail_data.get("time"),
+                "reason": detail_data.get("combined_reason") or detail_data.get("reason") or short_pool.get("message") or "该票未进入盘中短线池，重点参考历史行情与基本面。",
+                "price": latest.get("close"),
+                "turnover_ratio": (detail_data.get("capital_flow") or {}).get("turnover_ratio") or (history.get("daily_basic") or {}).get("turnover_rate"),
+                "data_sources": detail_data.get("data_sources", []),
+            }
+            report = _stock_agent.generate_summary(prompt_stock, themes)
+            return wrap_contract(
+                {"code": code, "name": detail_data.get("name", code), "report": report},
+                source="tushare+kpl+llm",
+                status="real",
+                code=code,
+                name=detail_data.get("name", code),
+                report=report,
+            )
+
         # 从涨停池/炸板池/热股中查找真实数据
         limit_up = _kpl.get_limit_up(trade_date)
         broken = _kpl.get_broken(trade_date)
@@ -314,6 +401,11 @@ def _build_chat_market_context(trade_date: str) -> tuple[str, list[str]]:
         limit_up = _kpl.get_limit_up(trade_date)
         broken = _kpl.get_broken(trade_date)
         sectors = _kpl.get_concept_selected(trade_date)
+        if not sectors and limit_up:
+            from apps.api.routes.replay import _build_sectors_from_limit_up
+
+            sectors = _build_sectors_from_limit_up(limit_up)
+            sources.append("KPL limit_up derived sectors")
         summary = build_market_summary(kpl_stats, limit_up, broken)
         summary["trade_date"] = trade_date
 
@@ -324,6 +416,54 @@ def _build_chat_market_context(trade_date: str) -> tuple[str, list[str]]:
     except Exception:
         logger.warning("AI chat market context unavailable", exc_info=True)
         return f"## 市场数据\n- trade_date: {trade_date}\n- KPL 核心市场上下文暂不可用，回答需明确提示数据缺口。", sources
+
+
+def _previous_weekday(date_str: str, steps: int = 1) -> str:
+    cursor = datetime.strptime(date_str, "%Y-%m-%d").date()
+    remaining = max(steps, 0)
+    while remaining > 0:
+        cursor -= timedelta(days=1)
+        if cursor.weekday() < 5:
+            remaining -= 1
+    return cursor.strftime("%Y-%m-%d")
+
+
+def _resolve_chat_trade_date(
+    message: str,
+    history: list[dict],
+    fallback_date: str,
+) -> tuple[str, str]:
+    """Resolve the data date from the user's question before building evidence."""
+    text = message or ""
+
+    explicit = re.search(r"(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})", text)
+    if explicit:
+        y, m, d = explicit.groups()
+        return f"{int(y):04d}-{int(m):02d}-{int(d):02d}", "explicit_date"
+
+    compact = re.search(r"\b(20\d{6})\b", text)
+    if compact:
+        raw = compact.group(1)
+        return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}", "explicit_date"
+
+    if any(token in text for token in ("昨日", "昨天", "上个交易日", "前一交易日")):
+        return _previous_weekday(fallback_date, 1), "relative_yesterday"
+    if any(token in text for token in ("前日", "前天")):
+        return _previous_weekday(fallback_date, 2), "relative_before_yesterday"
+    if any(token in text for token in ("今日", "今天", "当日", "现在", "当前")):
+        return fallback_date, "relative_today"
+
+    # Short follow-ups like "那昨天呢" usually carry only the new temporal
+    # intent. If absent, keep the page date instead of reusing a prior answer's
+    # date, because the fresh question should decide the evidence window.
+    for msg in reversed(history[-6:]):
+        content = str(msg.get("content") or "")
+        explicit = re.search(r"(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})", content)
+        if explicit and any(token in text for token in ("那", "这个", "它", "呢")):
+            y, m, d = explicit.groups()
+            return f"{int(y):04d}-{int(m):02d}-{int(d):02d}", "history_reference"
+
+    return fallback_date, "page_date"
 
 
 @router.get("/theme-stocks")
@@ -356,10 +496,17 @@ def ai_theme_stocks(theme: str = Query(..., min_length=1, max_length=50), date: 
 def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
     try:
         from apps.ai.agents.llm_client import llm
-        trade_date = inp.trade_date or datetime.now().strftime("%Y-%m-%d")
+        requested_trade_date = inp.trade_date or datetime.now().strftime("%Y-%m-%d")
+        trade_date, date_resolution = _resolve_chat_trade_date(
+            inp.message,
+            inp.history,
+            requested_trade_date,
+        )
         page_ctx = _page_context(inp.current_page)
         market_context, context_sources = _build_chat_market_context(trade_date)
         evidence = build_copilot_evidence(inp.message, inp.current_page, trade_date)
+        evidence["requested_trade_date"] = requested_trade_date
+        evidence["date_resolution"] = date_resolution
         evidence_text = format_copilot_evidence(evidence)
         context_sources = list(dict.fromkeys([*page_ctx["apis"], *context_sources, *evidence.get("sources", [])]))
 
@@ -378,11 +525,14 @@ def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
 当前页面：{page_ctx["label"]}
 当前页面可用 API：{"、".join(page_ctx["apis"])}
 全局可补充 API：GET /api/market/summary、GET /api/market/ladder、GET /api/market/sectors、GET /api/market/capital-flow、GET /api/market/next-day-strategy
+题材工坊补充 API：GET /api/theme/library、GET /api/theme/library/{{theme_id}}、GET /api/theme/library/{{theme_id}}/matched。
 子页面数据规则：你不能直接读取前端隐藏组件的本地状态；但只要对应后端 API 已知，就可以基于这些 API 的全局/页面上下文回答跨板块问题。
 连续追问规则：结合最近 6 轮历史回答，不要丢失用户上一轮限定条件。
-数据时间：{trade_date}。AI 速报和本次短线上下文默认使用当日 KPL 实时/收盘口径数据；若用户询问历史日，则以传入日期为准。
+页面传入日期：{requested_trade_date}。
+本轮问题解析后的数据时间：{trade_date}（解析规则：{date_resolution}）。如果用户说“昨日/昨天/上个交易日”，必须用解析后的历史交易日数据回答，不能沿用当前页快照。
 回答约束：
 - 如果用户追问“某题材的 N 只票”，必须先使用下方 evidence.theme_stocks 里的股票明细逐只分析。
+- 如果用户问“主线/题材库/今日题材/昨日题材”，必须优先使用 evidence.theme_library.top 与 selected/detail；如果该证据包有 message，要把数据来源或缺口说清楚。
 - 如果 evidence.theme_stocks 为空，不要编造股票名单；请明确说当前 API 未匹配到题材成分股，并建议用户换题材名或补充股票代码。
 - 不允许输出“买入/卖出/满仓”等指令；用“关注/观察/回避/等待确认/风险边界”表达。
 
@@ -398,12 +548,17 @@ def ai_chat(inp: ChatInput, _user: dict = Depends(consume_quota("ai_chat"))):
 {inp.message}
 """
         response = llm.chat(prompt)
+        status, message = _llm_contract_status(response)
         return {
             "message": inp.message,
             "response": response,
             "context_sources": context_sources,
             "evidence": evidence,
             "trade_date": trade_date,
+            "requested_trade_date": requested_trade_date,
+            "date_resolution": date_resolution,
+            "data_status": status,
+            "status_message": message,
         }
     except Exception:
         logger.exception("AI对话失败")

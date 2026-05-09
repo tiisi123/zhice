@@ -4,6 +4,7 @@ import logging
 import math
 from typing import Any
 
+from packages.backtest.engine import BacktestDataUnavailable
 from packages.features.etf.rotation import (
     ETF_SERIES,
     RECOMMENDED_POOL,
@@ -276,12 +277,13 @@ def _load_live_etf_data(years: int) -> list[dict[str, Any]] | None:
 
 
 def run_etf_backtest(
-    mode: str = "sample",
+    mode: str = "auto",
     years: int = 1,
 ) -> dict:
     strategy_name = "ETF轮动策略"
+    normalized_mode = (mode or "auto").strip().lower()
 
-    if mode == "sample":
+    if normalized_mode == "sample":
         months = max(years * 12, 3)
         extended = _generate_extended_sample_series(months)
         data_mode = "sample"
@@ -293,11 +295,7 @@ def run_etf_backtest(
             data_mode = "live"
             data_source = "tushare_fund_daily"
         else:
-            months = max(years * 12, 3)
-            extended = _generate_extended_sample_series(months)
-            data_mode = "sample"
-            data_source = "sample_engine"
-            logger.info("live TuShare data unavailable, falling back to sample mode")
+            raise BacktestDataUnavailable("TuShare ETF 实盘数据不可用，ETF 回测未使用演示数据自动兜底；可显式选择 mode=sample 查看演示。")
 
     trades, curve, rebalance_log = _simulate_etf_rotation(extended, rebalance_interval=22)
 

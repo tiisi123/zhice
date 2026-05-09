@@ -28,6 +28,12 @@
 - [x] **S05: GSD Automation Bootstrap** `risk:low` `depends:[]`
   > After this: the installed `gsd-pi` CLI is usable in this repository and preflight/recovery scripts call supported headless commands.
 
+- [x] **S06: PRD Closure** `risk:medium` `depends:[S02,S03,S04,S05]`
+  > After this: the five remaining PRD gaps are closed with auto-mode defaults, PRD metadata, integration tests, explicit sample/static statuses, and bootstrap scripts.
+
+- [x] **S07: Data Regression QA And KPL Detail Recovery** `risk:high` `depends:[S06]`
+  > After this: Eastmoney single-stock realtime fallback stays rolled back, KPL-first data pages pass a QA matrix, theme sector detail no longer shows empty members when sector/limit-up data exists, and auth/data-state errors are distinguishable in the UI.
+
 ## Boundary Map
 
 ### S01 -> S02
@@ -61,3 +67,14 @@ Produces:
 
 Consumes from S03:
   cache module and metadata conventions.
+
+### S06 -> S07
+Produces:
+  live/cache/sample metadata contracts
+  KPL-first short-line data routes
+  AI API environment isolation tests
+
+Consumes:
+  D004 response contract conventions
+  existing KPL realtime/history connectors
+  current web `DataStatusBadge` and API meta extraction patterns.

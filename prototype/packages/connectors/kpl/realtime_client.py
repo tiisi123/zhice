@@ -46,8 +46,8 @@ def _recent_5min(now: Optional[datetime.datetime] = None) -> str:
 class KplRealtimeClient:
     """KPL realtime endpoint (apphwhq) client.
 
-    KPL authenticates via DeviceID in POST body, not HTTP cookies.
-    The cookie parameter is kept for backwards compatibility but is optional.
+    KPL realtime calls require both DeviceID form data and the operator-managed
+    mobile Cookie captured from daban_pc.
     """
 
     def __init__(
@@ -68,14 +68,22 @@ class KplRealtimeClient:
     def _headers(self, host_key: str = "realtime") -> dict:
         h = _DEFAULT_HEADERS.copy()
         h["Host"] = HOST_MAP.get(host_key, HOST_MAP["realtime"])
+        if self.cookie:
+            h["Cookie"] = self.cookie
         return h
 
+    def _has_credentials(self) -> bool:
+        return bool(self.cookie or (self.token and self.user_id))
+
     def _post(self, url: str, data: dict, host_key: str = "realtime") -> dict:
+        if not self._has_credentials():
+            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
             if not resp.text.strip():
-                logger.warning(
+                log = logger.info if data.get("a") in {"ConceptSelected"} else logger.warning
+                log(
                     "KPL realtime empty body: endpoint=%s a=%s",
                     url,
                     data.get("a", ""),
@@ -125,17 +133,23 @@ class KplRealtimeClient:
 
     # 板块强度（实时）— daban_pc 实测 a=RealRankingInfo c=ZhiShuRanking
     def get_sectors_realtime(self, index: int = 0, order: int = 0) -> dict:
+        try:
+            rend = self._recent_5min()
+        except ValueError as exc:
+            logger.info("KPL realtime skipped before market open: %s", exc)
+            return {"_error": "kpl_market_closed", "http_code": 0}
         data = self._base_params(
             a="RealRankingInfo",
             c="ZhiShuRanking",
             RStart="0925",
-            REnd=self._recent_5min(),
+            REnd=rend,
             Type="-4",
             old="1",
             ZSType="7",
             filterType="",
             Order=str(order),
             Index=str(index),
+            st="30",
         )
         return self._post(KPL_REALTIME_HOST, data, "realtime")
 
@@ -151,11 +165,16 @@ class KplRealtimeClient:
 
     # 概念精选（实时）
     def get_concept_selected(self, index: int = 0, order: int = 0) -> dict:
+        try:
+            rend = self._recent_5min()
+        except ValueError as exc:
+            logger.info("KPL realtime skipped before market open: %s", exc)
+            return {"_error": "kpl_market_closed", "http_code": 0}
         data = self._base_params(
             a="ConceptSelected",
             c="HomeDingPan",
             RStart="0925",
-            REnd=self._recent_5min(),
+            REnd=rend,
             IsZZ="0",
             TSZB="0",
             IsKZZType="0",
@@ -167,14 +186,49 @@ class KplRealtimeClient:
         )
         return self._post(KPL_REALTIME_HOST, data, "realtime")
 
+    def get_stock_ranking(
+        self,
+        index: int = 0,
+        page_size: int = 26,
+        *,
+        order: str = "1",
+        ranking_type: str = "1",
+        ratio: str = "6",
+        date: str = "",
+    ) -> dict:
+        data = self._base_params(
+            a="RealRankingInfo_W8",
+            c="NewStockRanking",
+            Order=str(order),
+            st=str(page_size),
+            RStart="0925",
+            REnd="1500",
+            Isst="0",
+            index=str(index),
+            Date=date,
+            Type=str(ranking_type),
+            FilterMotherboard="0",
+            Filter="0",
+            Ratio=str(ratio),
+            FilterBJS="0",
+            FilterTIB="0",
+            FilterGem="0",
+        )
+        return self._post(KPL_REALTIME_HOST, data, "realtime")
+
     # 概念详情（实时）— daban_pc 实测 a=ZhiShuStockList_W8
     def get_concept_detail(self, plate_id: str, index: int = 0) -> dict:
+        try:
+            rend = self._recent_5min()
+        except ValueError as exc:
+            logger.info("KPL realtime skipped before market open: %s", exc)
+            return {"_error": "kpl_market_closed", "http_code": 0}
         data = self._base_params(
             a="ZhiShuStockList_W8",
             c="HomeDingPan",
             PlateID=plate_id,
             RStart="0925",
-            REnd=self._recent_5min(),
+            REnd=rend,
             Type="-4",
             old="1",
             ZSType="7",
@@ -192,6 +246,15 @@ class KplRealtimeClient:
             c="HomeDingPan",
             PlateID=plate_id,
             IsShow="1",
+        )
+        return self._post(KPL_REALTIME_HOST, data, "realtime")
+
+    # 题材库详情 — daban_pc HomeThemeDetailPage uses a=InfoGet, c=Theme, ID=<theme_id>
+    def get_theme_info(self, theme_id: str) -> dict:
+        data = self._base_params(
+            a="InfoGet",
+            c="Theme",
+            ID=str(theme_id),
         )
         return self._post(KPL_REALTIME_HOST, data, "realtime")
 

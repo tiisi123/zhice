@@ -117,6 +117,47 @@ def _prev_trade_date(hist_keys: list[str], today: str) -> Optional[str]:
     return earlier[-1] if earlier else None
 
 
+def _candidate_prev_trade_dates(today: str, lookback_days: int = 10) -> list[str]:
+    """Return recent calendar days before today, skipping weekends."""
+    try:
+        cursor = datetime.strptime(today, "%Y-%m-%d").date()
+    except ValueError:
+        return []
+
+    dates: list[str] = []
+    offset = 1
+    while len(dates) < lookback_days and offset <= lookback_days * 2:
+        d = cursor - timedelta(days=offset)
+        if d.weekday() < 5:
+            dates.append(d.strftime("%Y-%m-%d"))
+        offset += 1
+    return dates
+
+
+def _snapshot_ladder_from_kpl(trade_date: str) -> bool:
+    data = _kpl.get_limit_up(trade_date)
+    if not data:
+        return False
+    tiers = classify_board_tier(data)
+    result = {tn: identify_leader(ss) for tn, ss in sorted(tiers.items(), reverse=True)}
+    _snapshot_ladder(trade_date, result)
+    return True
+
+
+def _ensure_ladder_prev_snapshot(trade_date: str, hist: dict) -> dict:
+    if _prev_trade_date([k for k in hist.keys() if k != trade_date], trade_date):
+        return hist
+
+    for candidate in _candidate_prev_trade_dates(trade_date):
+        if candidate in hist:
+            return hist
+        if _snapshot_ladder_from_kpl(candidate):
+            refreshed = _load_json(_LADDER_HIST, {}) or {}
+            if candidate in refreshed:
+                return refreshed
+    return hist
+
+
 def _parse_tier_num(name: str) -> Optional[int]:
     m = re.search(r"\d+", str(name))
     return int(m.group()) if m else None
@@ -182,17 +223,140 @@ def _calc_sector_concentration(stocks: list[dict]) -> list[dict]:
     return [{"name": n, "count": c} for n, c in ranked]
 
 
+def _sector_names_from_stock(stock: dict) -> set[str]:
+    names: set[str] = set()
+    related = stock.get("related_plates") or []
+    if isinstance(related, str):
+        related = [x.strip() for x in related.replace("、", ",").split(",") if x.strip()]
+    for item in related:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("plate_name") or item.get("concept_name")
+        else:
+            name = str(item)
+        if name:
+            names.add(str(name).strip())
+    first = stock.get("first_plate_name")
+    if first:
+        names.add(str(first).strip())
+    return {n for n in names if n}
+
+
+_SECTOR_MEMBER_ALIASES: dict[str, tuple[str, ...]] = {
+    "算力": ("计算机", "通信", "光通信", "光模块", "数据中心", "服务器", "PCB", "CPO"),
+    "通信": ("通信", "光通信", "光模块", "CPO", "5G", "6G"),
+    "机器人概念": ("机器人", "自动化", "通用设备", "专用设备", "电机", "机械"),
+    "机器人": ("机器人", "自动化", "通用设备", "专用设备", "电机", "机械"),
+    "芯片": ("芯片", "半导体", "集成电路", "元件", "光学光电", "电子"),
+    "AI应用": ("AI", "人工智能", "软件", "传媒", "游戏", "互联网"),
+}
+
+
+def _norm_sector_name(name: str) -> str:
+    return re.sub(r"[\s（）()概念板块ⅡⅠ]+", "", name).lower()
+
+
+def _sector_matches_stock(sector_names: set[str], stock_names: set[str]) -> bool:
+    sector_tokens: set[str] = set()
+    for name in sector_names:
+        norm = _norm_sector_name(name)
+        if norm:
+            sector_tokens.add(norm)
+        for alias in _SECTOR_MEMBER_ALIASES.get(name, ()):
+            alias_norm = _norm_sector_name(alias)
+            if alias_norm:
+                sector_tokens.add(alias_norm)
+
+    stock_tokens = {_norm_sector_name(name) for name in stock_names}
+    stock_tokens = {name for name in stock_tokens if name}
+    for sector_token in sector_tokens:
+        for stock_token in stock_tokens:
+            if sector_token == stock_token or sector_token in stock_token or stock_token in sector_token:
+                return True
+    return False
+
+
+def _enrich_sectors_with_limit_members(sectors: list[dict], limit_up: list[dict]) -> list[dict]:
+    if not sectors or not limit_up:
+        return sectors
+
+    enriched: list[dict] = []
+    for sector in sectors:
+        names = {
+            str(
+                sector.get("name")
+                or sector.get("first_plate_name")
+                or sector.get("PlateName")
+                or sector.get("concept_name")
+                or sector.get("col2")
+                or ""
+            ).strip()
+        }
+        names = {n for n in names if n}
+        members = [
+            stock for stock in limit_up
+            if _sector_matches_stock(names, _sector_names_from_stock(stock))
+        ]
+        item = dict(sector)
+        item["limit_up_members"] = members[:20]
+        item["limit_up_count"] = len(members)
+        enriched.append(item)
+    return enriched
+
+
+def _build_sectors_from_limit_up(limit_up: list[dict]) -> list[dict]:
+    plate_map: dict[str, list[dict]] = {}
+    for stock in limit_up or []:
+        names = _sector_names_from_stock(stock)
+        for name in names:
+            plate_map.setdefault(name, []).append(stock)
+
+    rows: list[dict] = []
+    for idx, (name, members) in enumerate(
+        sorted(plate_map.items(), key=lambda item: len(item[1]), reverse=True)
+    ):
+        changes = [
+            float(stock.get("change_rate") or 0)
+            for stock in members
+            if stock.get("change_rate") is not None
+        ]
+        avg_change = round(sum(changes) / len(changes), 2) if changes else 0.0
+        board_max = max((int(stock.get("board_count") or 1) for stock in members), default=1)
+        intensity = len(members) * 100 + board_max * 10
+        amount = sum(float(stock.get("amount") or stock.get("seal_amount") or 0) for stock in members)
+        rows.append({
+            "PlateID": f"kpl_pool_{idx}",
+            "name": name,
+            "PlateName": name,
+            "concept_name": name,
+            "first_plate_name": name,
+            "ChangePercent": avg_change,
+            "change_rate": avg_change,
+            "concept_increase": avg_change,
+            "Intensity": intensity,
+            "intensity": intensity,
+            "concept_intensity": intensity,
+            "MainForce": amount,
+            "net_flow": amount,
+            "concept_net_amount": amount,
+            "Amount": amount,
+            "amount": amount,
+            "concept_amount": amount,
+            "LimitUpNum": len(members),
+            "limit_up_count": len(members),
+            "limit_up_members": members[:20],
+        })
+    return rows
+
+
 @router.get("/summary")
 def market_summary(date: Optional[str] = Query(None), user: dict = Depends(require_vip("standard"))):
     trade_date = date or datetime.now().strftime("%Y-%m-%d")
     try:
         kpl_stats = _kpl.get_market_statistics(trade_date)
-        # KPL cookie-dependent call above; if sentinel surfaced, short-circuit
-        # before pulling EM-public data so the contract reflects the real
-        # operator-action root cause (cookie missing) rather than masking it.
-        unavail = _maybe_unavailable(_kpl, trade_date=trade_date, body={}, total=0)
-        if unavail is not None:
-            return unavail
+        kpl_stats_message = ""
+        if from_client_state(_kpl):
+            kpl_stats_message = "KPL 市场统计不可用，复盘已使用东财涨停/炸板公开池降级展示。"
+            kpl_stats = []
         limit_up = _kpl.get_limit_up(trade_date)
         broken = _kpl.get_broken(trade_date)
         summary = build_market_summary(kpl_stats, limit_up, broken)
@@ -210,6 +374,7 @@ def market_summary(date: Optional[str] = Query(None), user: dict = Depends(requi
             summary,
             source="kpl",
             status="real" if status_total else "empty",
+            message=kpl_stats_message,
             trade_date=trade_date,
             total=total,
             **summary,
@@ -287,12 +452,10 @@ def ladder_relay(date: Optional[str] = Query(None)):
         hist = _load_json(_LADDER_HIST, {}) or {}
         if trade_date not in hist:
             # 触发当日落盘
-            data = _kpl.get_limit_up(trade_date)
-            tiers = classify_board_tier(data)
-            result = {tn: identify_leader(ss) for tn, ss in sorted(tiers.items(), reverse=True)}
-            _snapshot_ladder(trade_date, result)
+            _snapshot_ladder_from_kpl(trade_date)
             hist = _load_json(_LADDER_HIST, {}) or {}
 
+        hist = _ensure_ladder_prev_snapshot(trade_date, hist)
         prev_date = _prev_trade_date([k for k in hist.keys() if k != trade_date], trade_date)
         if not prev_date:
             return {
@@ -354,13 +517,21 @@ def sector_ranking(date: Optional[str] = Query(None)):
     try:
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
         data = _kpl.get_concept_selected(trade_date)
+        limit_up = _kpl.get_limit_up(trade_date)
+        if data:
+            data = _enrich_sectors_with_limit_members(data, limit_up)
+            source = "kpl"
+        else:
+            data = _build_sectors_from_limit_up(limit_up)
+            source = "kpl_pool_derived"
         unavail = _maybe_unavailable(_kpl, trade_date=trade_date, count=0)
-        if unavail is not None:
+        if unavail is not None and not data:
             return unavail
         return wrap_contract(
             data,
-            source="kpl",
+            source=source,
             status="real" if data else "empty",
+            message="KPL 概念板块接口不可用，已用涨停池派生主线。" if source == "kpl_pool_derived" and data else "",
             trade_date=trade_date,
             count=len(data),
         )
@@ -429,6 +600,8 @@ def _aggregate_sectors_window(end_date: str, window: int) -> list[dict]:
             sectors = _kpl.get_concept_selected(d)
         except Exception:
             continue
+        if not sectors:
+            sectors = _build_sectors_from_limit_up(_kpl.get_limit_up(d))
         for s in sectors[:60]:
             it = _extract_sector(s)
             name = it["name"]
@@ -455,6 +628,17 @@ def _aggregate_sectors_window(end_date: str, window: int) -> list[dict]:
     return out
 
 
+def _query_int(value, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        default = getattr(value, "default", fallback)
+        try:
+            return int(default)
+        except (TypeError, ValueError):
+            return fallback
+
+
 @router.get("/capital-flow")
 def capital_flow(
     date: Optional[str] = Query(None),
@@ -463,14 +647,31 @@ def capital_flow(
     """资金流向。window=1 当日；>1 累计近 N 个交易日（PRD M1-04: 5/10/20/60 日）。"""
     try:
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
+        window = _query_int(window, 1)
+        source = "kpl"
+        message = ""
         if window <= 1:
             sectors = _kpl.get_concept_selected(trade_date)
+            if not sectors:
+                sectors = _build_sectors_from_limit_up(_kpl.get_limit_up(trade_date))
+                if sectors:
+                    source = "kpl_pool_derived"
+                    message = "KPL 概念板块接口不可用，已用涨停池派生资金信号。"
             items = [_extract_sector(s) for s in sectors[:30]]
         else:
             items = _aggregate_sectors_window(trade_date, window)
         items = [it for it in items if it["name"]]
         items.sort(key=lambda x: abs(x["net_flow"]), reverse=True)
-        return {"count": len(items[:30]), "window": window, "data": items[:30]}
+        data = items[:30]
+        return wrap_contract(
+            data,
+            source=source,
+            status="real" if data else "empty",
+            message=message,
+            trade_date=trade_date,
+            count=len(data),
+            window=window,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取资金流向失败: {str(e)}")
 
@@ -483,12 +684,28 @@ def sector_rotation(
     """板块轮动散点。window=1 当日；>1 累计近 N 个交易日（PRD M2-01: 1/3/5/10 日）。"""
     try:
         trade_date = date or datetime.now().strftime("%Y-%m-%d")
+        window = _query_int(window, 1)
+        source = "kpl"
+        message = ""
         if window <= 1:
             sectors = _kpl.get_concept_selected(trade_date)
+            if not sectors:
+                sectors = _build_sectors_from_limit_up(_kpl.get_limit_up(trade_date))
+                if sectors:
+                    source = "kpl_pool_derived"
+                    message = "KPL 概念板块接口不可用，已用涨停池派生轮动信号。"
             points = [_extract_sector(s) for s in sectors[:40]]
         else:
             points = _aggregate_sectors_window(trade_date, window)[:40]
-        return {"count": len(points), "window": window, "data": points}
+        return wrap_contract(
+            points,
+            source=source,
+            status="real" if points else "empty",
+            message=message,
+            trade_date=trade_date,
+            count=len(points),
+            window=window,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取板块轮动失败: {str(e)}")
 
@@ -555,13 +772,26 @@ def next_day_strategy(date: Optional[str] = Query(None), user: dict = Depends(re
         ladder = {"tiers": tiers}
         # sectors
         sectors = _kpl.get_concept_selected(trade_date)[:40]
+        if sectors:
+            sectors = _enrich_sectors_with_limit_members(sectors, limit_up)
+        else:
+            sectors = _build_sectors_from_limit_up(limit_up)
         # 标准化 sector 字段名供 _pick_top_themes 使用
         sectors_norm = [{
             "name": _extract_sector(s)["name"],
             "intensity": _extract_sector(s)["intensity"],
+            "limit_up_members": s.get("limit_up_members") or [],
+            "limit_up_count": s.get("limit_up_count") or 0,
         } for s in sectors]
         sectors_norm.sort(key=lambda x: x["intensity"], reverse=True)
 
-        return build_next_day_strategy(summary, ladder, sectors_norm)
+        result = build_next_day_strategy(summary, ladder, sectors_norm)
+        return wrap_contract(
+            result,
+            source="kpl",
+            status="real",
+            trade_date=trade_date,
+            **result,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"生成次日策略失败: {str(e)}")

@@ -9,6 +9,7 @@
  */
 
 import type { ApiMeta, AnyData, DataStatus } from './types'
+import { ApiError } from './client'
 
 const VALID_STATUSES: ReadonlySet<string> = new Set([
   'real', 'mock', 'fallback', 'unavailable', 'empty', 'error',
@@ -27,8 +28,29 @@ export function extractMeta(resp: AnyData | null | undefined, name?: string): Ap
     mock: Boolean(resp?.mock),
   }
   if (resp?.message) meta.message = String(resp.message)
+  if (resp?.trade_date) meta.trade_date = String(resp.trade_date)
   if (name !== undefined) meta.name = name
   return meta
+}
+
+export function extractErrorMeta(error: unknown, name?: string): ApiMeta {
+  if (error instanceof ApiError) {
+    const isAuth = error.status === 401 || error.status === 403
+    return {
+      data_status: 'error',
+      source: isAuth ? 'auth' : 'api',
+      mock: false,
+      message: error.message,
+      ...(name !== undefined ? { name } : {}),
+    }
+  }
+  return {
+    data_status: 'error',
+    source: 'api',
+    mock: false,
+    message: error instanceof Error ? error.message : '请求失败',
+    ...(name !== undefined ? { name } : {}),
+  }
 }
 
 export function extractMetaList(

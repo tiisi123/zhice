@@ -170,13 +170,16 @@ export default function AICopilot({ open, onClose, currentPage = '' }: CopilotPr
     setLoading(true)
     try {
       const contextPrefix = pageHint ? `[当前页面: ${pageHint.label}] ` : ''
-      const data = await postApi<{ response: string; context_sources?: string[]; evidence?: AnyData }>('/ai/chat', {
+      const data = await postApi<{ response: string; context_sources?: string[]; evidence?: AnyData; data_status?: string; status_message?: string }>('/ai/chat', {
         message: contextPrefix + msg,
         history: chatMessages.slice(-6),
         current_page: currentPage,
         trade_date: reportSummary?.trade_date || new Date().toISOString().slice(0, 10),
       })
-      setChatMessages(prev => [...prev, { role: 'ai', content: data.response || '无回复', sources: data.context_sources || [], evidence: data.evidence }])
+      const content = data.data_status === 'unavailable' && data.status_message
+        ? data.status_message
+        : data.response || '无回复'
+      setChatMessages(prev => [...prev, { role: 'ai', content, sources: data.context_sources || [], evidence: data.evidence }])
     } catch {
       setChatMessages(prev => [...prev, { role: 'ai', content: '请求失败，请检查后端服务。' }])
     }

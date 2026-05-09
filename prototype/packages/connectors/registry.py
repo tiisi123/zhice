@@ -11,6 +11,16 @@ from .etf.client import EastmoneyEtfClient
 from .dfcf.client import DfcfClient
 
 
+def _read_kpl_cookie() -> str:
+    """Read the operator-managed KPL cookie from the encrypted secret store."""
+    try:
+        from apps.api.services.cookie_provider import get_kpl_cookie
+
+        return get_kpl_cookie()
+    except Exception:
+        return ""
+
+
 @lru_cache(maxsize=1)
 def get_kpl() -> KplClient:
     from apps.api.config import settings
@@ -20,6 +30,7 @@ def get_kpl() -> KplClient:
         token=settings.kpl_token,
         device_id=settings.kpl_device_id,
         version=settings.kpl_version,
+        cookie=_read_kpl_cookie() or settings.kpl_cookie,
     )
 
 
@@ -32,6 +43,7 @@ def get_kpl_realtime() -> KplRealtimeClient:
         token=settings.kpl_token,
         device_id=settings.kpl_device_id,
         version=settings.kpl_version,
+        cookie=_read_kpl_cookie() or settings.kpl_cookie,
     )
 
 
@@ -44,6 +56,7 @@ def get_kpl_history() -> KplHistoryClient:
         token=settings.kpl_token,
         device_id=settings.kpl_device_id,
         version=settings.kpl_version,
+        cookie=_read_kpl_cookie() or settings.kpl_cookie,
     )
 
 

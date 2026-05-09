@@ -141,10 +141,10 @@ def _send_alert_email(
     kind: str, endpoint: str, last_ok_at: str | None, last_error: str | None
 ) -> None:
     """Send the Chinese cookie-failure email through ``notify.smtp``."""
-    from apps.api.notify.smtp import send_alert
-    from apps.api.notify.templates import cookie_failure_email_body
-
     try:
+        from apps.api.notify.smtp import send_alert
+        from apps.api.notify.templates import cookie_failure_email_body
+
         http_code = _extract_http_code(last_error)
         body = cookie_failure_email_body(
             endpoint, http_code, last_ok_at, last_error or "unknown"
@@ -157,10 +157,10 @@ def _send_alert_email(
 
 def _send_recovery_email(kind: str, endpoint: str) -> None:
     """Send the Chinese cookie-recovery email when a failing probe turns green."""
-    from apps.api.notify.smtp import send_alert
-    from apps.api.notify.templates import cookie_recovery_email_body
-
     try:
+        from apps.api.notify.smtp import send_alert
+        from apps.api.notify.templates import cookie_recovery_email_body
+
         send_alert(
             f"【智策】KPL {endpoint} 已恢复",
             cookie_recovery_email_body(endpoint),

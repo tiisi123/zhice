@@ -110,11 +110,155 @@ def _extract_list(resp) -> list:
     return resp.get("list", []) or []
 
 
+def _normalize_concept_selected_rows(rows: list) -> list[dict]:
+    normalized: list[dict] = []
+    for row in rows or []:
+        if isinstance(row, dict):
+            normalized.append(row)
+            continue
+        if not isinstance(row, (list, tuple)) or len(row) < 4:
+            continue
+
+        plate_id = str(row[0] or "")
+        plate_name = str(row[1] or "")
+        intensity = _to_float(row[2]) if len(row) > 2 else 0.0
+        change = _to_float(row[3]) if len(row) > 3 else 0.0
+        turnover_ratio = _to_float(row[4]) if len(row) > 4 else 0.0
+        amount = _to_amount(row[5]) if len(row) > 5 else 0.0
+        main_force = _to_amount(row[6]) if len(row) > 6 else 0.0
+
+        normalized.append({
+            "PlateID": plate_id,
+            "plate_id": plate_id,
+            "PlateName": plate_name,
+            "plate_name": plate_name,
+            "concept_name": plate_name,
+            "first_plate_name": plate_name,
+            "Intensity": intensity,
+            "intensity": intensity,
+            "concept_intensity": intensity,
+            "ChangePercent": change,
+            "change_rate": change,
+            "concept_increase": change,
+            "TurnoverRatio": turnover_ratio,
+            "turnover_ratio": turnover_ratio,
+            "Amount": amount,
+            "amount": amount,
+            "concept_amount": amount,
+            "MainForce": main_force,
+            "net_flow": main_force,
+            "concept_net_amount": main_force,
+            "col2": plate_name,
+            "col3": row[2] if len(row) > 2 else 0,
+            "col4": row[3] if len(row) > 3 else 0,
+            "col6": row[5] if len(row) > 5 else 0,
+            "col7": row[6] if len(row) > 6 else 0,
+            "raw_row": list(row),
+        })
+    return normalized
+
+
+def _normalize_stock_ranking_row(row: list) -> dict:
+    values = list(row)
+    code = str(values[0] if len(values) > 0 and values[0] is not None else "")[:6]
+    name = str(values[1] if len(values) > 1 and values[1] is not None else "")
+    record = {
+        "stock_code": code,
+        "stock_name": name,
+        "change_rate": _to_float(values[2] if len(values) > 2 else 0),
+        "price": _to_float(values[3] if len(values) > 3 else 0),
+        "volume_ratio": _to_float(values[4] if len(values) > 4 else 0),
+        "turnover_ratio": _to_float(values[5] if len(values) > 5 else 0),
+        "amount": _to_amount(values[6] if len(values) > 6 else 0),
+        "net_flow": _to_amount(values[7] if len(values) > 7 else 0),
+        "ranking_score": _to_float(values[8] if len(values) > 8 else 0),
+        "raw_row": values,
+    }
+    for idx, value in enumerate(values):
+        record[f"col_{idx:02d}"] = value
+    return record
+
+
+def _normalize_theme_stock(row: dict) -> dict:
+    code = str(
+        row.get("stock_code")
+        or row.get("StockCode")
+        or row.get("StockID")
+        or row.get("code")
+        or row.get("Code")
+        or ""
+    )[:6]
+    name = (
+        row.get("stock_name")
+        or row.get("StockName")
+        or row.get("prod_name")
+        or row.get("name")
+        or row.get("Name")
+        or ""
+    )
+    return {
+        "stock_tag_name": row.get("stock_tag_name") or row.get("TagName") or row.get("tag_name") or "",
+        "stock_code": code,
+        "stock_name": name,
+        "stock_hot_num": _to_float(row.get("stock_hot_num") or row.get("HotNum") or row.get("hot_num")),
+        "stock_tag_reason": row.get("stock_tag_reason") or row.get("Reason") or row.get("reason") or "",
+        "raw": row,
+    }
+
+
+def normalize_theme_library_detail(resp: dict, *, theme_id: str = "") -> dict:
+    """Normalize KPL InfoGet/Theme response from the legacy theme library view.
+
+    The old daban_pc parser exposed five user-visible blocks: theme identity,
+    subgroup stock detail, hierarchical StockTable, BriefIntro, and Introduction.
+    This facade keeps those names stable so routes/UI can consume one contract
+    even if KPL changes casing or nests the payload under data/info.
+    """
+    if not isinstance(resp, dict) or _is_sentinel(resp):
+        return {}
+    payload = resp.get("data") or resp.get("info") or resp
+    if not isinstance(payload, dict):
+        return {}
+
+    stocks_raw = (
+        payload.get("theme_sub_detail")
+        or payload.get("StockList")
+        or payload.get("stock_list")
+        or payload.get("Stocks")
+        or []
+    )
+    theme_sub_detail: list[dict] = []
+    if isinstance(stocks_raw, list):
+        for item in stocks_raw:
+            if isinstance(item, dict):
+                theme_sub_detail.append(_normalize_theme_stock(item))
+
+    stock_table = payload.get("stock_table") or payload.get("StockTable") or payload.get("Table") or []
+    if not isinstance(stock_table, list):
+        stock_table = []
+
+    normalized = {
+        "theme_id": str(payload.get("theme_id") or payload.get("ID") or payload.get("id") or theme_id or ""),
+        "theme_name": payload.get("theme_name") or payload.get("Name") or payload.get("name") or "",
+        "theme_createtime": payload.get("theme_createtime") or payload.get("CreateTime") or payload.get("create_time") or "",
+        "theme_sub_detail": theme_sub_detail,
+        "stock_table": stock_table,
+        "brief_intro": payload.get("brief_intro") or payload.get("BriefIntro") or "",
+        "introduction_html": payload.get("introduction_html") or payload.get("Introduction") or "",
+        "raw": payload,
+    }
+    has_payload = any(
+        normalized.get(key)
+        for key in ("theme_name", "theme_createtime", "theme_sub_detail", "stock_table", "brief_intro", "introduction_html")
+    )
+    return normalized if has_payload else {}
+
+
 class KplClient:
     """c1 facade: shared DeviceID across realtime/history/merge hosts.
 
-    KPL authenticates via DeviceID in POST body, not HTTP cookies.
-    Constructs internal KplRealtimeClient + KplHistoryClient with the same
+    KPL authenticates with DeviceID form data plus the operator-managed mobile
+    Cookie. Constructs internal KplRealtimeClient + KplHistoryClient with the same
     credentials. Legacy 9-method signatures are preserved by delegating to
     the appropriate split client based on whether trade_date is today.
     """
@@ -159,9 +303,16 @@ class KplClient:
     def _headers(self, host_key: str = "merge") -> dict:
         h = _DEFAULT_HEADERS.copy()
         h["Host"] = HOST_MAP.get(host_key, HOST_MAP["merge"])
+        if self.cookie:
+            h["Cookie"] = self.cookie
         return h
 
+    def _has_credentials(self) -> bool:
+        return bool(self.cookie or (self.token and self.user_id))
+
     def _post(self, url: str, data: dict, host_key: str = "merge") -> dict:
+        if not self._has_credentials():
+            return {"_error": "cookie_missing"}
         try:
             resp = self._client.post(url, data=data, headers=self._headers(host_key))
             resp.raise_for_status()
@@ -259,26 +410,52 @@ class KplClient:
         return [row]
 
     def get_concept_selected(
-        self, trade_date: Optional[str] = None, index: int = 0, order: str = "0"
+        self,
+        trade_date: Optional[str] = None,
+        index: int = 0,
+        order: str = "1",
+        page_size: int = 30,
+        max_pages: int = 8,
     ) -> list[dict]:
         try:
             order_int = int(order)
         except (TypeError, ValueError):
-            order_int = 0
-        if self._is_today(trade_date):
-            resp = self._realtime.get_concept_selected(index=index, order=order_int)
+            order_int = 1
+
+        rows: list = []
+        last_resp = None
+        start_index = max(int(index or 0), 0)
+        size = max(int(page_size or 30), 1)
+        day = trade_date or datetime.now().strftime("%Y-%m-%d")
+
+        for page in range(max(int(max_pages or 1), 1)):
+            page_index = start_index + page * size
+            if self._is_today(trade_date):
+                resp = self._realtime.get_concept_selected(index=page_index, order=order_int)
+                if _is_sentinel(resp):
+                    resp = self._history.get_concept_selected_history(day, index=page_index)
+            else:
+                resp = self._history.get_concept_selected_history(day, index=page_index)
+            last_resp = resp
             if _is_sentinel(resp):
-                day = trade_date or datetime.now().strftime("%Y-%m-%d")
-                resp = self._history.get_concept_selected_history(day, index=index)
-        else:
-            resp = self._history.get_concept_selected_history(trade_date, index=index)
-        if _is_sentinel(resp):
-            fallback = self._sectors_from_ranking(index=index, order=order_int)
-            if fallback:
-                self._record(None)
-                return fallback
-        self._record(resp)
-        return _extract_list(resp)
+                break
+            page_rows = _extract_list(resp)
+            if not page_rows:
+                break
+            rows.extend(page_rows)
+            if len(page_rows) < size:
+                break
+
+        if rows:
+            self._record(None)
+            return _normalize_concept_selected_rows(rows)
+
+        fallback = self._sectors_from_ranking(index=index, order=order_int)
+        if fallback:
+            self._record(None)
+            return fallback
+        self._record(last_resp)
+        return []
 
     def _sectors_from_ranking(self, index: int = 0, order: int = 0) -> list[dict]:
         """Fallback: convert RealRankingInfo array rows into ConceptSelected-like dicts."""
@@ -288,20 +465,21 @@ class KplClient:
         rows = resp.get("list") or []
         result = []
         for row in rows:
-            if not isinstance(row, list) or len(row) < 10:
+            if not isinstance(row, list) or len(row) < 4:
                 continue
             result.append({
                 "PlateID": str(row[0]) if row[0] else "",
                 "PlateName": str(row[1]) if row[1] else "",
                 "concept_name": str(row[1]) if row[1] else "",
-                "ChangePercent": float(row[3]) if row[3] is not None else 0.0,
-                "concept_increase": float(row[3]) if row[3] is not None else 0.0,
-                "Intensity": float(row[9]) if row[9] is not None else 0.0,
-                "concept_intensity": float(row[9]) if row[9] is not None else 0.0,
-                "Amount": float(row[5]) if row[5] is not None else 0.0,
-                "concept_amount": float(row[5]) if row[5] is not None else 0.0,
-                "MainForce": float(row[8]) if row[8] is not None else 0.0,
-                "concept_net_amount": float(row[8]) if row[8] is not None else 0.0,
+                "ChangePercent": _to_float(row[3]) if row[3] is not None else 0.0,
+                "concept_increase": _to_float(row[3]) if row[3] is not None else 0.0,
+                "Intensity": _to_float(row[2]) if len(row) > 2 and row[2] is not None else 0.0,
+                "concept_intensity": _to_float(row[2]) if len(row) > 2 and row[2] is not None else 0.0,
+                "Amount": _to_amount(row[5]) if len(row) > 5 and row[5] is not None else 0.0,
+                "concept_amount": _to_amount(row[5]) if len(row) > 5 and row[5] is not None else 0.0,
+                "MainForce": _to_amount(row[6]) if len(row) > 6 and row[6] is not None else 0.0,
+                "concept_net_amount": _to_amount(row[6]) if len(row) > 6 and row[6] is not None else 0.0,
+                "raw_row": row,
             })
         return result
 
@@ -336,6 +514,49 @@ class KplClient:
             return _extract_list(resp)
         return []
 
+    def get_stock_ranking(
+        self,
+        *,
+        page_size: int = 26,
+        max_pages: int = 240,
+        date: str = "",
+    ) -> list[dict]:
+        rows: list[dict] = []
+        offset = 0
+        last_resp = None
+        while offset < page_size * max_pages:
+            resp = self._realtime.get_stock_ranking(
+                index=offset,
+                page_size=page_size,
+                date=date,
+            )
+            last_resp = resp
+            if _is_sentinel(resp):
+                break
+            page_rows = _extract_list(resp)
+            if not page_rows:
+                break
+            for row in page_rows:
+                if isinstance(row, list):
+                    rows.append(_normalize_stock_ranking_row(row))
+                elif isinstance(row, dict):
+                    rows.append(row)
+            if len(page_rows) < page_size:
+                break
+            offset += page_size
+        self._record(None if rows else last_resp)
+        return rows
+
+    def get_stock_realtime(self, code: str) -> dict:
+        needle = str(code or "")[:6]
+        if not needle:
+            return {}
+        for row in self.get_stock_ranking():
+            if str(row.get("stock_code", ""))[:6] == needle:
+                row["source"] = row.get("source") or "kpl_new_stock_ranking"
+                return row
+        return {}
+
     def get_limit_performance(
         self, trade_date: str, daily_limit: bool = True, order: str = "0"
     ) -> list[dict]:
@@ -367,6 +588,12 @@ class KplClient:
         if _is_sentinel(resp):
             return {}
         return resp if isinstance(resp, dict) else {}
+
+    def get_theme_library_detail(self, theme_id: str) -> dict:
+        resp = self._record(self._realtime.get_theme_info(theme_id))
+        if _is_sentinel(resp):
+            return {}
+        return normalize_theme_library_detail(resp, theme_id=theme_id)
 
     def get_market_anomaly(self, trade_date: Optional[str] = None) -> list[dict]:
         if not self._is_today(trade_date):
